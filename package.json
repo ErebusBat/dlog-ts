@@ -1,0 +1,23 @@
+{
+  "name": "dlog-ts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "tsc --noEmit",
+    "inspect-log": "tsx src/inspect-log.ts",
+    "repl": "tsx"
+  },
+  "dependencies": {
+    "@lezer/common": "^0.15.11",
+    "@lezer/markdown": "^0.15.5",
+    "lezer-markdown-obsidian": "^0.0.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsx": "^4.23.0",
+    "typescript": "^5.9.0",
+    "@types/bun": "latest"
+  },
+  "module": "index.ts"
+}

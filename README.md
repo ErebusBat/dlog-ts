@@ -1,15 +1,206 @@
 # dlog
 
-To install dependencies:
+`dlog` appends a timestamped entry to the first `# Log` section in today's
+existing daily document. It also provides a one-shot normalizer and a watch
+mode. The observable compatibility contract is in
+[`docs/specification.md`](docs/specification.md); executable cases are listed
+in [`docs/conformance.md`](docs/conformance.md).
+
+## Development
+
+The project uses Bun 1.4, TypeScript, and `just`.
 
 ```bash
 bun install
+just check
+just run --help
+just compile
 ```
 
-To run:
+`just compile` creates:
+
+```text
+dist/<os>-<arch>/dlog
+dist/<os>-<arch>/dlog-append -> dlog
+dist/<os>-<arch>/dlog-fixup -> dlog
+```
+
+`just compile-all` builds the supported macOS ARM64 and Linux x64 targets.
+Builds never install into `~/bin`.
+
+## Commands
+
+`dlog` is a strict dispatcher:
 
 ```bash
-bun run index.ts
+dlog append Had coffee with Sarah
+dlog append                 # prompts for one line
+dlog fixup                  # normalize once
+dlog fixup --watch          # continue watching
 ```
 
-This project was created using `bun init` in bun v1.4.0. [Bun](https://bun.com) is a fast all-in-one JavaScript runtime.
+The argv0 aliases are equivalent:
+
+```bash
+dlog-append Had coffee with Sarah
+dlog-fixup --watch
+```
+
+Append arguments are joined with one space. Prefix an argument list with `--`
+to log a word that would otherwise be CLI syntax.
+
+Fixup options:
+
+```text
+-w, --watch
+-s, --sleep SECONDS
+-d, --delay SECONDS
+    --log-no-change SECONDS
+    --cache-config
+    --no-cache-config
+```
+
+## Application configuration
+
+The first readable primary configuration is loaded from:
+
+1. `$DLOG_CONFIG`, when nonblank;
+2. `~/.config/dlog/config.toml`;
+3. `./dlog.toml`.
+
+The primary file owns application settings. It cannot contain processing
+rules.
+
+```toml
+schema = "dlog-config/v1"
+
+# First existing directory wins.
+vault_roots = [
+  "$HOME/Obsidian/Main",
+  "~/Documents/Main",
+]
+
+# Uses the documented strftime package dialect and local time.
+daily_path = "logs/%Y/%m-%b/%Y-%m-%d-%a.md"
+entry_prefix = "- *%H:%M* - "
+
+[[includes]]
+path = "rules"
+# enabled = true
+```
+
+Path fields expand `~`, `$NAME`, and `${NAME}`. An unset variable is an error.
+The selected daily document must already exist and be a regular file.
+
+An include can name one TOML file or a directory. A directory contributes its
+immediate, non-hidden `*.toml` files in lexical filename order. Rule files may
+include more paths, but every relative path remains relative to the primary
+configuration directory. Include cycles and repeated files are errors.
+
+## Rule files
+
+Rule files have a distinct schema:
+
+```toml
+schema = "dlog-rules/v1"
+# enabled = true
+
+[[rules]]
+kind = "prefix"
+match = "W"
+replace = "Work"
+# enabled = true
+
+[[rules]]
+kind = "global"
+match = ":100:"
+replace = "💯"
+
+[[rules]]
+kind = "global"
+pattern = 'TEST-(\d+)'
+replace = "TEST-$1"
+
+[[rules]]
+kind = "link"
+match = "PAGE"
+page = "Page"
+# display = "Shown text"
+# alias = "Shown text" # ergonomic synonym for display
+
+[[plugins]]
+name = "phone-formatter"
+protocol = "text"
+command = "/usr/local/bin/format-phone"
+arguments = []
+# enabled = true
+
+[[rules]]
+kind = "callback"
+matcher = "phone"
+plugin = "phone-formatter"
+```
+
+All rules share one ordered `[[rules]]` list. Prefix rules run first in their
+registration order; global, link, and callback rules then run in their
+registration order. Literal and regular-expression keys are distinct.
+Duplicate prefix keys and duplicate global/link/callback keys are errors.
+
+Rules, plugins, includes, and whole rule files accept `enabled`, defaulting to
+`true`. Disabled records remain schema-validated but are not registered,
+duplicate-checked, resolved, or executed.
+
+Matchers use exactly one of:
+
+- `match = "literal"`;
+- `pattern = "JavaScript regular expression"` with optional `flags`;
+- `matcher = "phone"` for the bundled North American phone pattern.
+
+A callback can set `scope = "prefix"` with a literal `match`; the default scope
+is `global`.
+
+## Executable plugins and tools
+
+Plugins are synchronous executables resolved through `PATH`, or from the
+process working directory when the configured name contains `/`. Only
+executable regular files qualify. Arguments are explicit TOML string arrays;
+no shell parses or expands them.
+
+The default JSON protocol writes this request to standard input:
+
+```json
+{
+  "protocol": "dlog-substitution/v1",
+  "fullEntryBeforeRule": "complete entry before this rule",
+  "matchedText": "this match"
+}
+```
+
+It accepts one response:
+
+```json
+{"action":"replace","value":"replacement"}
+{"action":"no-change"}
+{"action":"delete"}
+```
+
+The `text` protocol writes the exact matched text to standard input. Exit
+status `0` replaces the match with trimmed standard output; empty output
+deletes the match. A nonzero exit is an error.
+
+## Compatibility profile
+
+The implementation deliberately preserves the document writer's destructive
+filtering, lexical whole-line sort, digest behavior, task/timestamp split
+quirks, direct overwrite, and missing terminal newline.
+
+It deliberately differs from the Ruby-compatible profile in three places:
+
+- configuration is versioned TOML rather than executable Ruby;
+- daily paths and entry prefixes are strftime templates rather than arbitrary
+  configuration functions;
+- external commands receive explicit argv arrays and never run through a
+  shell.
+
+The bundled Spotify helper, container image, direct clipboard API, and legacy
+configuration adapter are outside this implementation's scope.

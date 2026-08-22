@@ -5,13 +5,14 @@
     "": {
       "name": "dlog",
       "dependencies": {
-        "@lezer/common": "^0.15.11",
-        "@lezer/markdown": "^0.15.5",
-        "lezer-markdown-obsidian": "^0.0.3",
+        "strftime": "^0.10.3",
+        "zod": "^4.4.3",
       },
       "devDependencies": {
         "@types/bun": "latest",
         "@types/node": "^24.0.0",
+        "@types/strftime": "^0.9.8",
+        "prettier": "^3.9.6",
         "tsx": "^4.23.0",
         "typescript": "^5.9.0",
       },
@@ -70,13 +71,11 @@
 
     "@esbuild/win32-x64": ["@esbuild/win32-x64@0.28.2", "", { "os": "win32", "cpu": "x64" }, "sha512-5ebpxr3nWMzrL/rnUI755Jkuee0bHL/Gq0WTF9lvcpv73wAp5eu8MfBUgWK9bhWvZjj7yX8etf/8tI8Ney695g=="],
 
-    "@lezer/common": ["@lezer/common@0.15.12", "", {}, "sha512-edfwCxNLnzq5pBA/yaIhwJ3U3Kz8VAUOTRg0hhxaizaI1N+qxV7EXDv/kLCkLeq2RzSFvxexlaj5Mzfn2kY0Ig=="],
-
-    "@lezer/markdown": ["@lezer/markdown@0.15.6", "", { "dependencies": { "@lezer/common": "^0.15.0" } }, "sha512-1XXLa4q0ZthryUEfO47ipvZHxNb+sCKoQIMM9dKs5vXZOBbgF2Vah/GL3g26BFIAEc2uCv4VQnI+lSrv58BT3g=="],
-
     "@types/bun": ["@types/bun@1.4.0", "", { "dependencies": { "bun-types": "1.4.0" } }, "sha512-K+lZULY23vRgK/CfTjFIV+tyifaNdSMlPh9j+6mQ/cLfpOznLyAuzgV/JQysyECpkBQLVMSyvjlr2fBUSA9wFQ=="],
 
     "@types/node": ["@types/node@24.13.3", "", { "dependencies": { "undici-types": "~7.18.0" } }, "sha512-Dh8vAsV36ig5wa9OX4pXvMc9D3Veibfw2wix0CUwYODLD8nkj9UsLjASr49nPg+2eKzxhBV+v7L8pXvT4e639Q=="],
+
+    "@types/strftime": ["@types/strftime@0.9.8", "", {}, "sha512-QIvDlGAKyF3YJbT3QZnfC+RIvV5noyDbi+ZJ5rkaSRqxCGrYJefgXm3leZAjtoQOutZe1hCXbAg+p89/Vj4HlQ=="],
 
     "bun-types": ["bun-types@1.4.0", "", { "dependencies": { "@types/node": "*" } }, "sha512-iIKw23BspnQQYd3prITOBxeUsxBHnwzX6YJfGMuNOZzeNcMmVqzIIVGRm1l69ogaPQmb4wB6BN8mA5bE9YuC5Q=="],
 
@@ -84,12 +83,16 @@
 
     "fsevents": ["fsevents@2.3.3", "", { "os": "darwin" }, "sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw=="],
 
-    "lezer-markdown-obsidian": ["lezer-markdown-obsidian@0.0.3", "", { "dependencies": { "@lezer/common": "^0.15.11", "@lezer/markdown": "^0.15.5" } }, "sha512-3om4zLXFhVANZcOzjar8RLnayYgc/RKFWdpd/pkQc379zKmaGlTy/EPSB/J1nDT4NhPfNNVUJFjJ7DLhhcKLMw=="],
+    "prettier": ["prettier@3.9.6", "", { "bin": { "prettier": "bin/prettier.cjs" } }, "sha512-OpN0zzVdiaiAhxpuuj5efpIS4sY9j7bY6uR5mnj5yPzGkdkjNKSJeUThPb60Jw29QuAZgA4o+/iB49kFiaBX6g=="],
+
+    "strftime": ["strftime@0.10.3", "", {}, "sha512-DZrDUeIF73eKJ4/GgGuv8UHWcUQPYDYfDeQFj3jrx+JZl6GQE656MbHIpvbo4mEG9a5DgS8GRCc5DxJXD2udDQ=="],
 
     "tsx": ["tsx@4.23.12", "", { "dependencies": { "esbuild": "~0.28.0" }, "optionalDependencies": { "fsevents": "~2.3.3" }, "bin": "dist/cli.mjs" }, "sha512-FDf4L4sYzKtzWYhU/Xm0AQFdTjdIxNo9ElTf2mxXM6k8YMHXzYUe4yODVaXP4V9uMFbVg8c0qyBccK2OOxb45Q=="],
 
     "typescript": ["typescript@5.9.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw=="],
 
     "undici-types": ["undici-types@7.18.2", "", {}, "sha512-AsuCzffGHJybSaRrmr5eHr81mwJU3kjw6M+uprWvCXiNeN9SOGwQ3Jn8jb8m3Z6izVgknn1R0FTCEAP2QrLY/w=="],
+
+    "zod": ["zod@4.4.3", "", {}, "sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ=="],
   }
 }

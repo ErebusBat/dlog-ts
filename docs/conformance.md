@@ -20,26 +20,32 @@ For deterministic examples below, use local time `2025-07-25 10:30:00`. The defa
 
 These cases verify configuration semantics. The configuration format and how a deployment discovers its configuration are implementation choices.
 
-| ID | Setup | Expected result |
-| --- | --- | --- |
-| CFG-01 | A supplied configuration source is readable and nonempty. | Load one configuration model before processing input. |
-| CFG-02 | No usable configuration source is available. | Fail clearly before reading or modifying a daily document. |
-| CFG-03 | A relative included fragment is named `people`. | Resolve it against the primary configuration's parent, not the process working directory. |
-| CFG-04 | A nested fragment includes `tools`. | Resolve `tools` against the same primary configuration parent, not the nested fragment's parent. |
-| CFG-05 | A glob includes files whose names sort as `10-base`, `20-people`, `90-tools`. | Load in that lexical order. |
-| CFG-06 | The same prefix key is registered twice. | Reject the duplicate. |
-| CFG-07 | The same global or wiki-link key is registered twice. | Reject the duplicate. |
-| CFG-08 | A link has an empty page value. | Reject it. |
+| ID     | Setup                                                                         | Expected result                                                                                   |
+| ------ | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| CFG-01 | A supplied configuration source is readable and nonempty.                     | Load one configuration model before processing input.                                             |
+| CFG-02 | No usable configuration source is available.                                  | Fail clearly before reading or modifying a daily document.                                        |
+| CFG-03 | A relative included fragment is named `people`.                               | Resolve it against the primary configuration's parent, not the process working directory.         |
+| CFG-04 | A nested fragment includes `tools`.                                           | Resolve `tools` against the same primary configuration parent, not the nested fragment's parent.  |
+| CFG-05 | A glob includes files whose names sort as `10-base`, `20-people`, `90-tools`. | Load in that lexical order.                                                                       |
+| CFG-06 | The same prefix key is registered twice.                                      | Reject the duplicate.                                                                             |
+| CFG-07 | The same global or wiki-link key is registered twice.                         | Reject the duplicate.                                                                             |
+| CFG-08 | A link has an empty page value.                                               | Reject it.                                                                                        |
+| CFG-09 | A rule, plugin, include, or whole rule file sets `enabled = false`.           | Validate its schema, then omit it from registration, duplicate checks, resolution, and execution. |
+| CFG-10 | A primary include names a directory.                                          | Load only its immediate non-hidden `*.toml` files in lexical order.                               |
+| CFG-11 | A path field contains `~`, `$NAME`, or `${NAME}`.                             | Expand it; reject a reference to an unset variable.                                               |
+| CFG-12 | A primary or rule file omits its required schema marker.                      | Reject it as the wrong or unsupported schema.                                                     |
 
 ## Input acquisition and append scenarios
 
-| ID | Invocation | Expected result |
-| --- | --- | --- |
-| CLI-01 | Positional words: `Had`, `coffee`, `with`, `Sarah`. | Process exactly `Had coffee with Sarah`. |
-| CLI-02 | No words; standard input is `Had coffee\n`. | Write `Enter Log: `, process `Had coffee`. |
-| CLI-03 | Input is blank or whitespace only. | Standard error is `No input, exiting`; status is `1`; document is unchanged. |
-| CLI-04 | Processing produces a blank rendered entry. | Standard error is `Entry was blank, exiting`; status is `2`; document is unchanged. |
-| CLI-05 | A normal rendered entry is persisted successfully. | Print that exact rendered entry to standard output after the write. |
+| ID     | Invocation                                          | Expected result                                                                     |
+| ------ | --------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| CLI-01 | Positional words: `Had`, `coffee`, `with`, `Sarah`. | Process exactly `Had coffee with Sarah`.                                            |
+| CLI-02 | No words; standard input is `Had coffee\n`.         | Write `Enter Log: `, process `Had coffee`.                                          |
+| CLI-03 | Input is blank or whitespace only.                  | Standard error is `No input, exiting`; status is `1`; document is unchanged.        |
+| CLI-04 | Processing produces a blank rendered entry.         | Standard error is `Entry was blank, exiting`; status is `2`; document is unchanged. |
+| CLI-05 | A normal rendered entry is persisted successfully.  | Print that exact rendered entry to standard output after the write.                 |
+| CLI-06 | Invoke `dlog` without an explicit subcommand.       | Print dispatcher help to standard error and exit nonzero.                           |
+| CLI-07 | Invoke through `dlog-append` or `dlog-fixup`.       | Infer the matching subcommand from argv0.                                           |
 
 ## Entry-processing scenarios
 
@@ -51,29 +57,29 @@ Configure these ordered rules unless a case says otherwise:
 - wiki-link `PAGE` → page `Page`;
 - dynamic global rule `TEST-(digits)` → unchanged below 1000, otherwise `[[TEST Issue <digits>]]`.
 
-| ID | Input | Expected entry text | Expected rendered entry |
-| --- | --- | --- | --- |
-| ENT-01 | `W on PAGE, :100:` | `Work on [[Page]], 💯` | `- *10:30* - Work on [[Page]], 💯` |
-| ENT-02 | `MEET Sarah` | `👥 Sarah` | `- *10:30* - 👥 Sarah` |
-| ENT-03 | `W- Task` | `W- Task` | `- *10:30* - W- Task` |
-| ENT-04 | `W` | `Work` | `- *10:30* - Work` |
-| ENT-05 | `TEST-999 and TEST-1234` | `TEST-999 and [[TEST Issue 1234]]` | `- *10:30* - TEST-999 and [[TEST Issue 1234]]` |
-| ENT-06 | A replacement rule removes `[REMOVE]` from `This [REMOVE] stays`. | `This  stays` before final trimming. | `- *10:30* - This  stays` |
+| ID     | Input                                                             | Expected entry text                  | Expected rendered entry                        |
+| ------ | ----------------------------------------------------------------- | ------------------------------------ | ---------------------------------------------- |
+| ENT-01 | `W on PAGE, :100:`                                                | `Work on [[Page]], 💯`               | `- *10:30* - Work on [[Page]], 💯`             |
+| ENT-02 | `MEET Sarah`                                                      | `👥 Sarah`                           | `- *10:30* - 👥 Sarah`                         |
+| ENT-03 | `W- Task`                                                         | `W- Task`                            | `- *10:30* - W- Task`                          |
+| ENT-04 | `W`                                                               | `Work`                               | `- *10:30* - Work`                             |
+| ENT-05 | `TEST-999 and TEST-1234`                                          | `TEST-999 and [[TEST Issue 1234]]`   | `- *10:30* - TEST-999 and [[TEST Issue 1234]]` |
+| ENT-06 | A replacement rule removes `[REMOVE]` from `This [REMOVE] stays`. | `This  stays` before final trimming. | `- *10:30* - This  stays`                      |
 
 The callback in ENT-05 must receive the complete entry as it stood before the `TEST-…` rule, once for each match. Returning the no-change value must preserve only that match, not abort the rule.
 
 ### Timestamp scenarios
 
-| ID | Input | Expected timestamp | Expected remaining text |
-| --- | --- | --- | --- |
-| TIME-01 | `12:34|Had lunch` | `12:34` | `Had lunch` |
-| TIME-02 | `0922|W on PAGE` | `09:22` | `W on PAGE` |
-| TIME-03 | `-12|W on PAGE` | `10:18` | `W on PAGE` |
-| TIME-04 | `-1h3m|W on PAGE` | `09:27` | `W on PAGE` |
-| TIME-05 | `-45m|W on PAGE` | `09:45` | `W on PAGE` |
-| TIME-06 | `-3h|W on PAGE` | `07:30` | `W on PAGE` |
-| TIME-07 | `.` | `10:30` | `⬆︎` |
-| TIME-08 | `-5|.` | `10:25` | `.` |
+| ID      | Input  | Expected timestamp | Expected remaining text |
+| ------- | ------ | ------------------ | ----------------------- |
+| TIME-01 | `12:34 | Had lunch`         | `12:34`                 | `Had lunch` |
+| TIME-02 | `0922  | W on PAGE`         | `09:22`                 | `W on PAGE` |
+| TIME-03 | `-12   | W on PAGE`         | `10:18`                 | `W on PAGE` |
+| TIME-04 | `-1h3m | W on PAGE`         | `09:27`                 | `W on PAGE` |
+| TIME-05 | `-45m  | W on PAGE`         | `09:45`                 | `W on PAGE` |
+| TIME-06 | `-3h   | W on PAGE`         | `07:30`                 | `W on PAGE` |
+| TIME-07 | `.`    | `10:30`            | `⬆︎`                     |
+| TIME-08 | `-5    | .`                 | `10:25`                 | `.`         |
 
 For TIME-01 through TIME-06, apply the configured substitutions after extraction. A library-level caller that supplies a timestamp and sends `12:34|text` or `-5|text` must fail rather than selecting one timestamp silently.
 
@@ -81,19 +87,19 @@ For TIME-01 through TIME-06, apply the configured substitutions after extraction
 
 A dynamic replacement that surrounds each helper match with square brackets must produce these values:
 
-| Input | Output |
-| --- | --- |
-| `Call 123-456-7890` | `Call [123-456-7890]` |
-| `Call (123) 456-7890` | `Call [(123) 456-7890]` |
-| `Call 123.456.7890` | `Call [123.456.7890]` |
-| `Call 1234567890` | `Call [1234567890]` |
-| `Call 123 456 7890` | `Call [123 456 7890]` |
-| `Call 1-234-567-8901` | `Call [1-234-567-8901]` |
-| `Call 1 234-567-8901` | `Call [1 234-567-8901]` |
-| `Call 1 (234) 567-8901` | `Call [1 (234) 567-8901]` |
-| `Call 1.234.567.8901` | `Call [1.234.567.8901]` |
-| `Call 12345678901` | `Call [12345678901]` |
-| `Call 456-7890` | `Call 456-7890` |
+| Input                               | Output                                  |
+| ----------------------------------- | --------------------------------------- |
+| `Call 123-456-7890`                 | `Call [123-456-7890]`                   |
+| `Call (123) 456-7890`               | `Call [(123) 456-7890]`                 |
+| `Call 123.456.7890`                 | `Call [123.456.7890]`                   |
+| `Call 1234567890`                   | `Call [1234567890]`                     |
+| `Call 123 456 7890`                 | `Call [123 456 7890]`                   |
+| `Call 1-234-567-8901`               | `Call [1-234-567-8901]`                 |
+| `Call 1 234-567-8901`               | `Call [1 234-567-8901]`                 |
+| `Call 1 (234) 567-8901`             | `Call [1 (234) 567-8901]`               |
+| `Call 1.234.567.8901`               | `Call [1.234.567.8901]`                 |
+| `Call 12345678901`                  | `Call [12345678901]`                    |
+| `Call 456-7890`                     | `Call 456-7890`                         |
 | `Call 123-456-7890 or 987-654-3210` | `Call [123-456-7890] or [987-654-3210]` |
 
 ## Daily-document scenarios
@@ -104,11 +110,13 @@ Input document:
 
 ```markdown
 # Some Header
+
 Content here
 
 # Log
 
 # Another Header
+
 More content
 ```
 
@@ -117,7 +125,7 @@ Append `- *10:00* - Test entry`. The log region must contain exactly:
 ```markdown
 # Log
 
-- *10:00* - Test entry
+- _10:00_ - Test entry
 
 # Another Header
 ```
@@ -130,9 +138,10 @@ Input log section:
 
 ```markdown
 # Log
-- *10:00* - Coffee
-- *14:00* - Meeting
-- *09:00* - Breakfast
+
+- _10:00_ - Coffee
+- _14:00_ - Meeting
+- _09:00_ - Breakfast
 ```
 
 Append `- *11:00* - Lunch`. The retained entries, in order, must be:
@@ -188,10 +197,12 @@ Start with this document whose log section reaches end of file:
 
 ```markdown
 # Some Header
+
 Content
 
 # Log
-- *10:00* - First entry
+
+- _10:00_ - First entry
 ```
 
 Append `- *09:00* - Earlier entry`. The final bytes must be equivalent to:
@@ -215,6 +226,7 @@ Run fixup. The timestamped entry must be extracted as a normal entry. The unchec
 ### DLOG-10: No-op digest
 
 Use a canonically formatted log section: a blank line immediately after `# Log`, followed only by sorted standard entries, plus the expected section spacing. Run fixup without a new entry. It must report no change and leave bytes untouched. Changing spacing, adding any nonstandard line, changing order, or adding a duplicate must trigger a rewrite.
+
 ### DLOG-11: Mid-entry timestamp split
 
 Start with a `# Log` line that contains a second timestamped entry after arbitrary text, without a task marker or list marker before it:
@@ -226,51 +238,61 @@ Start with a `# Log` line that contains a second timestamped entry after arbitra
 Run fixup. The embedded `*09:45* - Follow up` is extracted and normalized into a full list item by prepending `- `. The residual is retained as-is; residuals are not re-trimmed, so the first line keeps its single trailing space. The resulting section is:
 
 ```text
-- *09:00* - Wrote notes ⬆︎ 
+- *09:00* - Wrote notes ⬆︎
 - *09:45* - Follow up
 ```
 
 ## External-tool scenarios
 
-| ID | Setup | Expected result |
-| --- | --- | --- |
-| TOOL-01 | A bare executable name resolves through `PATH`, exits `0`, and writes ` result \n`. | `toolOutput` is `result`; `toolSuccess` is true; `toolError` is false. |
-| TOOL-02 | A path-like name resolves to a nonexecutable file. | `hasTool` is false and its negative resolution is cached. |
-| TOOL-03 | The configured tool exits `4`. | `toolError` is true; captured output is still available. |
-| TOOL-04 | A callback sets a tool path, then checks output before running. | Output is empty/null and exit status is nonzero. |
-| TOOL-05 | A tool path contains `/` but is relative. | Resolve from the process working directory, not the configuration directory. |
-| TOOL-06 | A callback invokes the currently selected tool again with an argument string, without naming it. | The same resolved executable runs with that argument string; captured output is cleared first and refreshed along with the exit status. |
+| ID      | Setup                                                                                                    | Expected result                                                                                                                                  |
+| ------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| TOOL-01 | A bare executable name resolves through `PATH`, exits `0`, and writes ` result \n`.                      | `toolOutput` is `result`; `toolSuccess` is true; `toolError` is false.                                                                           |
+| TOOL-02 | A path-like name resolves to a nonexecutable file.                                                       | `hasTool` is false and its negative resolution is cached.                                                                                        |
+| TOOL-03 | The configured tool exits `4`.                                                                           | `toolError` is true; captured output is still available.                                                                                         |
+| TOOL-04 | A callback sets a tool path, then checks output before running.                                          | Output is empty/null and exit status is nonzero.                                                                                                 |
+| TOOL-05 | A tool path contains `/` but is relative.                                                                | Resolve from the process working directory, not the configuration directory.                                                                     |
+| TOOL-06 | A callback invokes the currently selected tool again with an explicit argument array, without naming it. | The same resolved executable runs with exactly those argument values; captured output is cleared first and refreshed along with the exit status. |
+| TOOL-07 | A text-protocol plugin receives a match and exits `0` with ` result \n`.                                 | Send the exact match on standard input and replace it with `result`.                                                                             |
+| TOOL-08 | A text-protocol plugin exits `0` with blank output.                                                      | Delete that match.                                                                                                                               |
+| TOOL-09 | A JSON-protocol plugin returns a valid replace, no-change, or delete response.                           | Apply the selected callback state to that match.                                                                                                 |
+| TOOL-10 | A plugin exits nonzero.                                                                                  | Propagate a callback error containing its status.                                                                                                |
 
 ## Fixup watcher scenarios
 
 Use a fake monotonic clock and controllable document hash.
 
-| ID | State transition | Expected behavior |
-| --- | --- | --- |
-| FIX-01 | Start once mode with a stable daily document. | Observe it, then run exactly one fixup without the normal delay because startup is under 10 seconds; exit afterward. |
-| FIX-02 | Loop mode observes hash A, then A again. | Run the initial fixup after the second observation. |
-| FIX-03 | Loop mode observes A, then B, then B. | Treat B as a stabilized external change; wait `writeDelay` when past startup grace, then rehash before fixing. |
-| FIX-04 | During the delay in FIX-03, the hash changes from B to C. | Do not fix B; record C as pending and wait for C to stabilize. |
-| FIX-05 | Fixup itself changes the file. | Refresh the stored hash so the next poll does not treat that write as external. |
-| FIX-06 | Cached configuration crosses a local midnight. | Reload configuration and select the new day's document. |
-| FIX-07 | Configuration caching is disabled. | Reload on every configuration access, even multiple times per poll cycle. |
-| FIX-08 | No main-loop pet arrives for 60 seconds. | Emit one watchdog warning. |
-| FIX-09 | No main-loop pet arrives for 120 seconds. | Exit with status `7`. |
-| FIX-10 | Start loop mode with `--watch` and no `--delay`. | Use a zero-second write delay; selecting loop mode does not restore the constructor's one-second value. |
+| ID     | State transition                                          | Expected behavior                                                                                                    |
+| ------ | --------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| FIX-01 | Start once mode with a stable daily document.             | Observe it, then run exactly one fixup without the normal delay because startup is under 10 seconds; exit afterward. |
+| FIX-02 | Loop mode observes hash A, then A again.                  | Run the initial fixup after the second observation.                                                                  |
+| FIX-03 | Loop mode observes A, then B, then B.                     | Treat B as a stabilized external change; wait `writeDelay` when past startup grace, then rehash before fixing.       |
+| FIX-04 | During the delay in FIX-03, the hash changes from B to C. | Do not fix B; record C as pending and wait for C to stabilize.                                                       |
+| FIX-05 | Fixup itself changes the file.                            | Refresh the stored hash so the next poll does not treat that write as external.                                      |
+| FIX-06 | Cached configuration crosses a local midnight.            | Reload configuration and select the new day's document.                                                              |
+| FIX-07 | Configuration caching is disabled.                        | Reload on every configuration access, even multiple times per poll cycle.                                            |
+| FIX-08 | No main-loop pet arrives for 60 seconds.                  | Emit one watchdog warning.                                                                                           |
+| FIX-09 | No main-loop pet arrives for 120 seconds.                 | Exit with status `7`.                                                                                                |
+| FIX-10 | Start loop mode with `--watch` and no `--delay`.          | Use a zero-second write delay; selecting loop mode does not restore the constructor's one-second value.              |
 
 ## Spotify helper scenarios
 
-These are optional unless the target reimplements the bundled helper.
+These are optional and are not run for this TypeScript implementation because
+the bundled helper is outside its selected scope.
 
-| ID | Mocked condition | Expected standard output |
-| --- | --- | --- |
-| SPOT-01 | A valid unexpired token and a track titled `Song`, artist `A` and `B`, URL `https://open.spotify.com/track/x`. | `[🎵 Song - A, B](https://open.spotify.com/track/x)` |
-| SPOT-02 | The currently-playing endpoint returns 204. | `❌ SONG ERROR: No track currently playing` |
-| SPOT-03 | The endpoint returns 401 and refresh fails. | `❌ SONG ERROR: Access token expired, please re-authorize` |
-| SPOT-04 | The endpoint returns 500. | `❌ SONG ERROR: API request failed (500)` |
-| SPOT-05 | Token expiry is less than five minutes away and a refresh token exists. | Refresh before querying current playback. |
-| SPOT-06 | No usable token exists. | Start authorization-code flow with `user-read-currently-playing` and a local callback at the configured port. |
+| ID      | Mocked condition                                                                                               | Expected standard output                                                                                      |
+| ------- | -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| SPOT-01 | A valid unexpired token and a track titled `Song`, artist `A` and `B`, URL `https://open.spotify.com/track/x`. | `[🎵 Song - A, B](https://open.spotify.com/track/x)`                                                          |
+| SPOT-02 | The currently-playing endpoint returns 204.                                                                    | `❌ SONG ERROR: No track currently playing`                                                                   |
+| SPOT-03 | The endpoint returns 401 and refresh fails.                                                                    | `❌ SONG ERROR: Access token expired, please re-authorize`                                                    |
+| SPOT-04 | The endpoint returns 500.                                                                                      | `❌ SONG ERROR: API request failed (500)`                                                                     |
+| SPOT-05 | Token expiry is less than five minutes away and a refresh token exists.                                        | Refresh before querying current playback.                                                                     |
+| SPOT-06 | No usable token exists.                                                                                        | Start authorization-code flow with `user-read-currently-playing` and a local callback at the configured port. |
 
 ## Evidence note
 
-The current repository's behavioral suite was executed while this specification was produced. It contains 69 examples with one known mismatch: an assertion expects a terminal newline after an end-of-file log section, while the running writer strips that final newline. DLOG-08 follows the running writer and is the normative requirement.
+The TypeScript suite executes 81 deterministic tests across six files and
+covers every non-Spotify scenario plus the implementation-profile cases above.
+The Ruby behavioral suite used to derive this contract contained 69 examples
+with one known mismatch: an assertion expected a terminal newline after an
+end-of-file log section while the running writer stripped it. DLOG-08 follows
+the running writer and remains normative.

@@ -18,6 +18,18 @@ A compatible implementation includes:
 
 It does **not** need to accept the current executable configuration-file syntax. Use a portable configuration representation appropriate to the target platform, but preserve the semantics and callback contracts below. A legacy configuration adapter is optional and outside this specification.
 
+### TypeScript implementation profile
+
+This repository implements scope items 1 through 4. It does not bundle the
+optional Spotify helper, container image, direct clipboard integration, or a
+legacy Ruby configuration adapter. Existing standalone helpers remain usable
+through executable plugins.
+
+The implementation uses versioned TOML configuration, strftime templates for
+daily paths and entry prefixes, and explicit executable argument arrays. These
+choices are normative for this repository where they differ from the portable
+Ruby-derived contract below.
+
 ## Terminology
 
 - **Entry text**: The user's text after timestamp-prefix extraction and substitutions, before the entry-prefix formatter runs.
@@ -46,6 +58,10 @@ The application is entirely local except for optional external executables such 
 
 ## Public command contracts
 
+The TypeScript CLI is one argv0-aware executable. `dlog` is a strict dispatcher
+requiring `append` or `fixup`. Symlinks named `dlog-append` and `dlog-fixup`
+infer the corresponding subcommand.
+
 ### Append command
 
 The primary command accepts zero or more positional words.
@@ -72,13 +88,13 @@ The secondary command normalizes the `# Log` section without adding an entry. It
 
 Its options are:
 
-| Option | Meaning | Default / bounds |
-| --- | --- | --- |
-| `-w`, `--watch` | Select loop mode. | Default is once mode. |
-| `-s`, `--sleep SECONDS` | Poll interval in loop mode. | `5`; clamp to 1–3600 seconds. |
-| `-d`, `--delay SECONDS` | Delay after a stabilized change before fixup. | `0` even after `--watch` selects loop mode; clamp to 0–3600 seconds. |
-| `--log-no-change SECONDS` | Minimum interval between no-change messages. | `60`; negative values suppress those messages indefinitely. |
-| `--cache-config`, `--no-cache-config` | Reuse configuration within a local calendar day or reload it on each access. | Cache enabled. |
+| Option                                | Meaning                                                                      | Default / bounds                                                     |
+| ------------------------------------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| `-w`, `--watch`                       | Select loop mode.                                                            | Default is once mode.                                                |
+| `-s`, `--sleep SECONDS`               | Poll interval in loop mode.                                                  | `5`; clamp to 1–3600 seconds.                                        |
+| `-d`, `--delay SECONDS`               | Delay after a stabilized change before fixup.                                | `0` even after `--watch` selects loop mode; clamp to 0–3600 seconds. |
+| `--log-no-change SECONDS`             | Minimum interval between no-change messages.                                 | `60`; negative values suppress those messages indefinitely.          |
+| `--cache-config`, `--no-cache-config` | Reuse configuration within a local calendar day or reload it on each access. | Cache enabled.                                                       |
 
 Use a monotonic clock for polling, throttling, and watchdog timers. Operational log messages go to standard error and begin with the local date-time in brackets.
 
@@ -87,25 +103,30 @@ Use a monotonic clock for polling, throttling, and watchdog timers. Operational 
 Evaluate these candidate paths in order and load the first readable file:
 
 1. The path in the `DLOG_CONFIG` environment variable, if nonblank.
-2. `~/.config/dlog/vault.rb`.
-3. `./vault_config.rb`, relative to the current working directory.
+2. `~/.config/dlog/config.toml`.
+3. `./dlog.toml`, relative to the current working directory.
 
-Path expansion must expand a home-directory marker. If none is readable, fail with an error that identifies `~/.config/dlog/vault.rb` as the expected configuration location.
+Path expansion expands `~`, `$NAME`, and `${NAME}` in path-valued fields and
+rejects references to unset variables. If no candidate is readable, fail with
+an error that identifies `~/.config/dlog/config.toml` as the expected
+configuration location.
 
-The selected configuration file must exist and have nonzero length. Loading it produces one configuration object. Implementations may use JSON, TOML, a host-language builder, or another portable representation; they must expose the semantic fields and operations below.
+The selected primary file must exist, be nonempty, and declare
+`schema = "dlog-config/v1"`. Rule files declare
+`schema = "dlog-rules/v1"`. The primary owns singleton application settings;
+rule files own only includes, plugins, and processing rules.
 
 ### Required configuration model
 
-| Field or operation | Contract |
-| --- | --- |
-| `vaultRoot` | Required directory path. Expand it before validation; reject nonexistent directories. |
-| `dailyLogFinder(vaultRoot, day)` | Required two-argument function that returns the daily document path. The returned path must exist and be a regular file; the application does not create it. |
-| `entryPrefix(entryText, timestamp)` | Optional formatter. Its string result precedes entry text exactly. A static string is allowed and behaves as a constant formatter. |
-| `prefixSubstitutions` | Ordered, unique-key rules applied only at the beginning of entry text. |
-| `globalSubstitutions` | Ordered, unique-key rules applied anywhere in entry text. Wiki-link rules share this uniqueness namespace. |
-| `includes` | Optional readable configuration fragments. An absolute fragment uses its absolute path; a relative fragment resolves against the primary configuration file's parent directory. Nested includes still use that primary parent. |
-| `includeGlob(pattern)` | Optional glob include; resolve against the primary configuration parent, sort the matches lexicographically, then load each. |
-| `debugSink` | Optional line-oriented output destination. Debug output is `[local time] message`. |
+| Field or operation | Contract                                                                                                                                                                                                                                    |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `vaultRoots`       | Required ordered directory paths. Expand each path and select the first existing directory; reject the configuration if none qualify. The selected value is the runtime `vaultRoot`.                                                        |
+| `dailyPath`        | Required strftime template evaluated with the local day. Resolve a relative result beneath `vaultRoot`; the returned path must exist and be a regular file.                                                                                 |
+| `entryPrefix`      | Required strftime template. Its result precedes entry text exactly; an empty static string is allowed.                                                                                                                                      |
+| `rules`            | One ordered, discriminated list containing prefix, global, wiki-link, and callback rules.                                                                                                                                                   |
+| `includes`         | Optional rule files or directories. Resolve every relative path against the primary configuration parent, including nested includes. A directory loads its immediate non-hidden `*.toml` files lexically. Reject cycles and repeated files. |
+| `enabled`          | Optional on includes, rule files, plugins, and rules; defaults to true. Disabled content is schema-validated but otherwise inert.                                                                                                           |
+| `debugSink`        | Optional line-oriented output destination. Debug output is `[local time] message`.                                                                                                                                                          |
 
 Reject duplicate prefix keys and duplicate global/wiki-link keys. The current program treats a global string and a global pattern as distinct only when the configuration representation considers those keys distinct; preserve that rule in the chosen portable format.
 
@@ -141,12 +162,16 @@ Dynamic callbacks can invoke a configured executable synchronously.
 2. A path containing `/` resolves as a path relative to the process working directory if it is not absolute. A bare name resolves through the process `PATH`.
 3. Only executable files qualify. Cache both successful resolution and missing/nonexecutable results by the original requested name.
 4. Running a missing tool is an error.
-5. Invoke the resolved executable with an optional raw argument string, capture standard output, trim it, and retain the numeric process exit status.
+5. Invoke the resolved executable with an explicit ordered string array, capture
+   standard output, trim it, and retain the numeric process exit status. No
+   shell parses arguments, expands variables or globs, or implements pipelines
+   and redirection.
 6. `toolSuccess` is true only for status `0`; `toolError` is true for every other status. `toolOutput` returns the trimmed captured output.
 7. An availability query reports whether a requested tool resolves to an executable file, using the same resolution cache.
-8. The currently selected tool can be invoked again with a new argument string without being named again; doing so clears prior output and refreshes the exit status exactly as naming the tool again would.
+8. The currently selected tool can be invoked again with a new argument array without being named again; doing so clears prior output and refreshes the exit status exactly as naming the tool again would.
 
-The existing behavior delegates command construction to a shell and does not quote the optional argument string. A safety-improved implementation may avoid shell evaluation, but that is a deliberate behavioral incompatibility and must be called out if chosen.
+This explicit-argv contract is a deliberate safety incompatibility with the
+legacy shell-built raw argument string.
 
 ## Entry processing
 
@@ -164,11 +189,11 @@ If input matches this form, process it first and return immediately from preproc
 
 `duration` consists only of digits, `h`, and `m`. Interpret these recognized forms as a duration in the past:
 
-| Form | Meaning |
-| --- | --- |
-| `N` | N minutes ago |
-| `Nm` | N minutes ago |
-| `Nh` | N hours ago |
+| Form   | Meaning                   |
+| ------ | ------------------------- |
+| `N`    | N minutes ago             |
+| `Nm`   | N minutes ago             |
+| `Nh`   | N hours ago               |
 | `NhMm` | N hours and M minutes ago |
 
 A syntactically accepted duration that matches none of those four forms subtracts zero. This follows the current implementation and should not be replaced with stricter validation in compatibility mode.
@@ -234,7 +259,7 @@ If configured, call `entryPrefix(entryText, timestamp)` and concatenate its resu
 The bundled default configuration uses this formatter:
 
 ```text
-- *HH:MM* - 
+- *HH:MM* -
 ```
 
 That output is necessary for newly appended content to survive the document writer's standard-entry filter.
@@ -320,7 +345,7 @@ Start a separate watchdog using the monotonic clock. The main loop pets it once 
 
 ## Optional integrations and deployment
 
-### Spotify current-track utility
+### Spotify current-track utility (not bundled by this implementation)
 
 The supplied helper is an optional standalone executable suitable for a dynamic substitution. Its behavior is:
 
@@ -340,7 +365,7 @@ The supplied helper is an optional standalone executable suitable for a dynamic 
 
 The helper prints progress during initial authorization in addition to its final result. A caller that needs only one replacement string must account for that behavior.
 
-### Container image
+### Container image (not bundled by this implementation)
 
 The supplied container is a watch-mode deployment, not an append-command image:
 

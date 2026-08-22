@@ -15,8 +15,7 @@ ENTRY := 'src/index.ts'
 [default]
 [doc('Run TypeScript Checks and Tests')]
 [group('Development')]
-check:
-    just tsc test
+check: tsc test
 
 alias watch := check-watch
 [doc('Run TypeScript Checks and Tests evertime files change')]
@@ -80,7 +79,7 @@ BUN_CMD := 'mise x -- bun'
 BUN_CPU := if arch() == "aarch64" { "arm64" } else if arch() == "x86_64" { "x64" } else { arch() }
 BUN_OS := if os() == "macos" { "darwin" } else { os() }
 
-[doc('Install Dependancies')]
+[doc('Install dependencies')]
 [group('Compile')]
 install os=BUN_OS cpu=BUN_CPU:
     {{ BUN_CMD }} install --os {{ os }} --cpu {{ cpu }}
@@ -90,13 +89,16 @@ install os=BUN_OS cpu=BUN_CPU:
 build: install
     just compile
 
-[doc('Compile to native binary')]
+[doc('Compile one native binary with argv0 command aliases')]
 [group('Compile')]
 compile os=BUN_OS cpu=BUN_CPU:
-    {{ BUN_CMD }} build --compile --outfile={{ BUN_OUT }}/{{ CLI_BASENAME }}-{{ os }}-{{ cpu }} --target=bun-{{ os }}-{{ cpu }} {{ ENTRY }}
+    mkdir -p {{ BUN_OUT }}/{{ os }}-{{ cpu }}
+    {{ BUN_CMD }} build --compile --outfile={{ BUN_OUT }}/{{ os }}-{{ cpu }}/{{ CLI_BASENAME }} --target=bun-{{ os }}-{{ cpu }} {{ ENTRY }}
+    ln -sfn {{ CLI_BASENAME }} {{ BUN_OUT }}/{{ os }}-{{ cpu }}/{{ CLI_BASENAME }}-append
+    ln -sfn {{ CLI_BASENAME }} {{ BUN_OUT }}/{{ os }}-{{ cpu }}/{{ CLI_BASENAME }}-fixup
 
 #-----------------------------------------------------------
-#-- Cross Compliation
+### Cross Compilation
 #-----------------------------------------------------------
 [doc('All deps for all platforms')]
 [group('X-Compile')]
@@ -123,7 +125,7 @@ clean:
 ### project targets
 ############################################################
 alias r := run
-[doc('Run a file')]
+[doc('Run dlog from source')]
 [group('Development')]
-run *args='src/run.ts':
-    {{ BUN_CMD }} {{ args }}
+run *args:
+    {{ BUN_CMD }} run {{ ENTRY }} {{ args }}

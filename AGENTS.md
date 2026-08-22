@@ -1,4 +1,4 @@
-# dlog-ts
+# dlog
 
 ## Product contract
 

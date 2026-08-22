@@ -3,7 +3,7 @@
   "configVersion": 0,
   "workspaces": {
     "": {
-      "name": "dlog-ts",
+      "name": "dlog",
       "dependencies": {
         "@lezer/common": "^0.15.11",
         "@lezer/markdown": "^0.15.5",

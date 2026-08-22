@@ -4,9 +4,13 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "tsc --noEmit",
-    "inspect-log": "tsx src/inspect-log.ts",
-    "repl": "tsx"
+    "repl": "tsx",
+    "test": "bun test --concurrent --parallel",
+    "test:watch": "bun test --watch --dots --only-failures --concurrent",
+    "check": "just tsc",
+    "tsc": "just tsc",
+    "tsc:watch": "just tsc-watch",
+    "format": "prettier --write ."
   },
   "dependencies": {
     "@lezer/common": "^0.15.11",

@@ -14,13 +14,14 @@ A compatible implementation includes:
 2. Configuration discovery, the portable configuration model, substitutions, callbacks, and external-tool support.
 3. The daily-document parser and normalizer.
 4. The one-shot and watch-mode fixup command.
-5. The supplied optional Spotify current-track utility and container deployment behavior.
+5. The read-only tail display command.
+6. The supplied optional Spotify current-track utility and container deployment behavior.
 
 It does **not** need to accept the current executable configuration-file syntax. Use a portable configuration representation appropriate to the target platform, but preserve the semantics and callback contracts below. A legacy configuration adapter is optional and outside this specification.
 
 ### TypeScript implementation profile
 
-This repository implements scope items 1 through 4. It does not bundle the
+This repository implements scope items 1 through 5. It does not bundle the
 optional Spotify helper, container image, direct clipboard integration, or a
 legacy Ruby configuration adapter. Existing standalone helpers remain usable
 through executable plugins.
@@ -50,6 +51,8 @@ flowchart LR
   M --> D[Existing daily document]
   F[Fixup watcher] --> R
   F --> M
+  T[Tail display] --> R
+  T --> D
   P -. optional callback .-> X[External executable]
   S[Spotify helper] -. optional output .-> P
 ```
@@ -59,8 +62,8 @@ The application is entirely local except for optional external executables such 
 ## Public command contracts
 
 The TypeScript CLI is one argv0-aware executable. `dlog` is a strict dispatcher
-requiring `append` or `fixup`. Symlinks named `dlog-append` and `dlog-fixup`
-infer the corresponding subcommand.
+requiring `append`, `fixup`, or `tail`. Symlinks named `dlog-append`,
+`dlog-fixup`, and `dlog-tail` infer the corresponding subcommand.
 
 ### Append command
 
@@ -97,6 +100,50 @@ Its options are:
 | `--cache-config`, `--no-cache-config` | Reuse configuration within a local calendar day or reload it on each access. | Cache enabled.                                                       |
 
 Use a monotonic clock for polling, throttling, and watchdog timers. Operational log messages go to standard error and begin with the local date-time in brackets.
+
+### Tail command
+
+The tail command is a read-only, one-shot display command. It locates and loads configuration, resolves today's daily document, extracts the `# Log` section, and writes a formatted rendering to standard output. It never modifies the document. Unlike `tail -f`, it has no follow mode; the fixup command owns watching.
+
+1. Locate and load configuration as described in [Configuration discovery](#configuration-discovery) and resolve today's daily document.
+2. Extract the section using the same rules as the writer's [Section selection](#section-selection): the first line whose trimmed value is exactly `# Log`, the range up to the next heading or end of file, every line trimmed, blank lines discarded. A missing `# Log` header or a missing document is an error, exactly as for append.
+3. Write the rendered heading line, then one rendered line per extracted section line, in document order. Every written line, including the last, ends with a newline.
+4. Exit with status `0`.
+
+Tail displays everything in the section. It does not apply the writer's standard-entry filter, sort, split, or duplicate removal; those are write-time normalizations, not display rules.
+
+#### Rendering rules
+
+The heading renders as its text `Log` without the `# ` marker. Each section line renders with this inline markup consumed and styled, following Obsidian display rules:
+
+| Markup                    | Display                                   |
+| ------------------------- | ----------------------------------------- |
+| `**text**`                | `text`, bold                              |
+| `*text*` or `_text_`      | `text`, italic                            |
+| `[[page]]`                | `page`, link style                        |
+| `[[page\|display]]`       | `display`, link style                     |
+| `[text](url)`             | `text`, link style; the URL is not shown  |
+
+Parsing precedence is links first, then bold, then italic. Unmatched or unterminated markers render literally. Markup inside link display text is not further parsed.
+
+When styling is enabled, the renderer wraps each span in ANSI SGR sequences:
+
+- Heading: bold cyan, `\x1b[1;36m` … `\x1b[0m`.
+- Bold: `\x1b[1m` … `\x1b[0m`.
+- Italic: `\x1b[3m` … `\x1b[0m`.
+- Link style: underline blue, `\x1b[4;34m` … `\x1b[0m`.
+
+Each span resets with `\x1b[0m` so nesting requires no partial-reset logic.
+
+#### Color policy
+
+The command accepts one option:
+
+| Option                          | Meaning                                                        | Default |
+| ------------------------------- | -------------------------------------------------------------- | ------- |
+| `--color WHEN`                  | `auto`, `always`, or `never`.                                  | `auto`  |
+
+In `auto` mode, styling is emitted only when standard output is a terminal and the `NO_COLOR` environment variable is unset or blank. `NO_COLOR` forces plain output in `auto` mode; `--color=always` overrides it. Plain output is the display text alone: heading text, link display text, and no markup markers or escape sequences.
 
 ## Configuration discovery
 

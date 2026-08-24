@@ -9,7 +9,7 @@ import {
   ConfigurationLoader,
   type ConfigurationEnvironment,
 } from "./configuration.js";
-import { DailyDocumentWriter } from "./daily-document.js";
+import { DailyDocumentReader, DailyDocumentWriter } from "./daily-document.js";
 import {
   Sha256FileHasher,
   SystemWatchdogScheduler,
@@ -32,6 +32,11 @@ class TestIO implements CommandIO {
   public output = "";
   public error = "";
   public input = "";
+  public outputIsTerminal = false;
+
+  public isOutputTerminal(): boolean {
+    return this.outputIsTerminal;
+  }
 
   public writeOutput(value: string): void {
     this.output += value;
@@ -115,6 +120,7 @@ ${include}`,
       configurationLoader: new ConfigurationLoader({
         environment: configEnvironment,
       }),
+      documentReader: new DailyDocumentReader(),
       documentWriter: new DailyDocumentWriter(),
       clock: new FixedClock(),
       hasher: new Sha256FileHasher(),
@@ -212,7 +218,9 @@ path = "rules.toml"
   test("strict dispatcher rejects a missing subcommand", async () => {
     const fixture = await cliFixture();
     expect(await runCli("dlog", [], fixture.dependencies)).toBe(1);
-    expect(fixture.io.error).toContain("explicit append or fixup subcommand");
+    expect(fixture.io.error).toContain(
+      "explicit append, fixup, or tail subcommand",
+    );
   });
 
   test("dlog-append argv0 alias infers append", async () => {

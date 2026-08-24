@@ -12,6 +12,7 @@ A conformance harness needs the ability to:
 - capture standard output, standard error, process status, and final document bytes;
 - simulate external executable exit status and output;
 - control watcher poll time and file hashes without waiting for real time;
+- control whether standard output is a terminal, set or clear `NO_COLOR`, and force tail color policy;
 - optionally mock the Spotify HTTP and OAuth boundaries.
 
 For deterministic examples below, use local time `2025-07-25 10:30:00`. The default entry formatter is `- *HH:MM* - ` unless another formatter is stated.
@@ -45,7 +46,7 @@ These cases verify configuration semantics. The configuration format and how a d
 | CLI-04 | Processing produces a blank rendered entry.         | Standard error is `Entry was blank, exiting`; status is `2`; document is unchanged. |
 | CLI-05 | A normal rendered entry is persisted successfully.  | Print that exact rendered entry to standard output after the write.                 |
 | CLI-06 | Invoke `dlog` without an explicit subcommand.       | Print dispatcher help to standard error and exit nonzero.                           |
-| CLI-07 | Invoke through `dlog-append` or `dlog-fixup`.       | Infer the matching subcommand from argv0.                                           |
+| CLI-07 | Invoke through `dlog-append`, `dlog-fixup`, or `dlog-tail`. | Infer the matching subcommand from argv0.                                 |
 
 ## Entry-processing scenarios
 
@@ -242,6 +243,22 @@ Run fixup. The embedded `*09:45* - Follow up` is extracted and normalized into a
 - *09:45* - Follow up
 ```
 
+## Tail display scenarios
+
+These cases run `dlog tail --color=always` unless stated otherwise, against the local day `2025-07-25`. Styled output is described with `ESC` for the ANSI escape character `\x1b`. Tail must never modify the document.
+
+| ID      | Setup                                                                                                   | Expected result                                                                                                                                                            |
+| ------- | ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| TAIL-01 | Section contains `- *09:00* - Coffee`.                                                                  | Standard output is `ESC[1;36mLogESC[0m\n- ESC[3m09:00ESC[0m - Coffee\n`; status `0`.                                                                                       |
+| TAIL-02 | Section contains `- *10:30* - Shipped **release** build`.                                               | Entry line renders as `- ESC[3m10:30ESC[0m - Shipped ESC[1mreleaseESC[0m build`.                                                                                            |
+| TAIL-03 | Section contains `- *11:00* - Reviewed [[Page]] and [[Page\|the plan]]; keep [[oops`.                    | `[[Page]]` renders `Page` and `[[Page\|the plan]]` renders `the plan`, each wrapped `ESC[4;34m` … `ESC[0m`; the unterminated `[[oops` renders literally.                     |
+| TAIL-04 | Section contains `- *12:00* - Read [status](https://example.com)`.                                      | Renders `Read ESC[4;34mstatusESC[0m`; the URL is not displayed.                                                                                                            |
+| TAIL-05 | Section contains `- *09:00* - [[Page]]`; run with piped output, with `NO_COLOR=1`, and `--color=never`. | Each run prints the plain form `Log\n- 09:00 - Page\n` with no escape sequences or markup markers. A `--color=always` run overrides `NO_COLOR` and emits the styled form.    |
+| TAIL-06 | Section contains a narrative note, an ordinary `- [ ]` task, and blank lines between entries.           | The note and task lines are displayed trimmed; blank lines are dropped; no lines are filtered, sorted, or deduplicated.                                                      |
+| TAIL-07 | Document has no exact trimmed `# Log` line.                                                             | Fail with a nonzero status, write nothing to standard output, and leave the document untouched.                                                                            |
+| TAIL-08 | The `# Log` section is empty.                                                                           | Standard output is the heading line only.                                                                                                                                  |
+| TAIL-09 | Any document.                                                                                           | After a successful run, the document bytes are identical to before the run.                                                                                                |
+
 ## External-tool scenarios
 
 | ID      | Setup                                                                                                    | Expected result                                                                                                                                  |
@@ -290,7 +307,7 @@ the bundled helper is outside its selected scope.
 
 ## Evidence note
 
-The TypeScript suite executes 81 deterministic tests across six files and
+The TypeScript suite executes 94 deterministic tests across seven files and
 covers every non-Spotify scenario plus the implementation-profile cases above.
 The Ruby behavioral suite used to derive this contract contained 69 examples
 with one known mismatch: an assertion expected a terminal newline after an

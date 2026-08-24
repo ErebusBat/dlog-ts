@@ -96,6 +96,7 @@ compile os=BUN_OS cpu=BUN_CPU:
     {{ BUN_CMD }} build --compile --outfile={{ BUN_OUT }}/{{ os }}-{{ cpu }}/{{ CLI_BASENAME }} --target=bun-{{ os }}-{{ cpu }} {{ ENTRY }}
     ln -sfn {{ CLI_BASENAME }} {{ BUN_OUT }}/{{ os }}-{{ cpu }}/{{ CLI_BASENAME }}-append
     ln -sfn {{ CLI_BASENAME }} {{ BUN_OUT }}/{{ os }}-{{ cpu }}/{{ CLI_BASENAME }}-fixup
+    ln -sfn {{ CLI_BASENAME }} {{ BUN_OUT }}/{{ os }}-{{ cpu }}/{{ CLI_BASENAME }}-tail
 
 #-----------------------------------------------------------
 ### Cross Compilation

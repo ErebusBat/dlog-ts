@@ -14,6 +14,7 @@ export interface CommandIO {
   writeOutput(value: string): void;
   writeError(value: string): void;
   readLine(): Promise<string>;
+  isOutputTerminal(): boolean;
 }
 
 export interface AppendCommandDependencies {
@@ -79,6 +80,10 @@ export class AppendCommand {
 }
 
 export class ProcessCommandIO implements CommandIO {
+  public isOutputTerminal(): boolean {
+    return process.stdout.isTTY === true;
+  }
+
   public writeOutput(value: string): void {
     process.stdout.write(value);
   }

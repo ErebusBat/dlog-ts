@@ -9,7 +9,7 @@ import {
   ConfigurationLoader,
   defaultConfigurationEnvironment,
 } from "./configuration.js";
-import { DailyDocumentWriter } from "./daily-document.js";
+import { DailyDocumentReader, DailyDocumentWriter } from "./daily-document.js";
 import { DlogError } from "./dlog-error.js";
 import {
   FixupWatcher,
@@ -23,12 +23,19 @@ import {
   type WatchClock,
   type WatchdogScheduler,
 } from "./fixup-watcher.js";
+import {
+  TailCommand,
+  parseTailOptions,
+  type TailCommandDependencies,
+} from "./tail-command.js";
 
 const ROOT_HELP = `Usage:
   dlog append [--] [WORDS...]
   dlog fixup [OPTIONS]
+  dlog tail [OPTIONS]
   dlog-append [--] [WORDS...]
   dlog-fixup [OPTIONS]
+  dlog-tail [OPTIONS]
 `;
 
 const APPEND_HELP = `Usage: dlog append [--] [WORDS...]
@@ -48,9 +55,19 @@ Options:
   -h, --help                   Show this help
 `;
 
+const TAIL_HELP = `Usage: dlog tail [OPTIONS]
+
+Print today's # Log section with headings, emphasis, and links rendered.
+
+Options:
+      --color WHEN             Emit ANSI styling: auto, always, never (default auto)
+  -h, --help                   Show this help
+`;
+
 export interface CliDependencies {
   readonly io: CommandIO;
   readonly configurationLoader: ConfigurationLoader;
+  readonly documentReader: DailyDocumentReader;
   readonly documentWriter: DailyDocumentWriter;
   readonly clock: WatchClock;
   readonly hasher: FileHasher;
@@ -69,10 +86,13 @@ export async function runCli(
   try {
     const invokedName = basename(invokedPath);
     if (invokedName === "dlog-append") {
-      return runAppend(arguments_, dependencies);
+      return await runAppend(arguments_, dependencies);
     }
     if (invokedName === "dlog-fixup") {
-      return runFixup(arguments_, dependencies);
+      return await runFixup(arguments_, dependencies);
+    }
+    if (invokedName === "dlog-tail") {
+      return await runTail(arguments_, dependencies);
     }
 
     const command = arguments_[0];
@@ -81,15 +101,18 @@ export async function runCli(
       return 0;
     }
     if (command === "append") {
-      return runAppend(arguments_.slice(1), dependencies);
+      return await runAppend(arguments_.slice(1), dependencies);
     }
     if (command === "fixup") {
-      return runFixup(arguments_.slice(1), dependencies);
+      return await runFixup(arguments_.slice(1), dependencies);
+    }
+    if (command === "tail") {
+      return await runTail(arguments_.slice(1), dependencies);
     }
 
     dependencies.io.writeError(
       command === undefined
-        ? `dlog: an explicit append or fixup subcommand is required\n${ROOT_HELP}`
+        ? `dlog: an explicit append, fixup, or tail subcommand is required\n${ROOT_HELP}`
         : `dlog: unknown subcommand: ${command}\n${ROOT_HELP}`,
     );
     return 1;
@@ -110,7 +133,8 @@ export function createDefaultCliDependencies(): CliDependencies {
     configurationLoader: new ConfigurationLoader({
       environment: configurationEnvironment,
     }),
-    documentWriter: new DailyDocumentWriter(),
+          documentReader: new DailyDocumentReader(),
+      documentWriter: new DailyDocumentWriter(),
     clock,
     hasher: new Sha256FileHasher(),
     logger: new StandardErrorLogger(clock),
@@ -161,6 +185,25 @@ async function runFixup(
     fatalExit: dependencies.fatalExit,
     keepWatching: () => true,
   }).run();
+}
+
+async function runTail(
+  arguments_: readonly string[],
+  dependencies: CliDependencies,
+): Promise<number> {
+  const parsed = parseTailOptions(arguments_);
+  if (parsed === "help") {
+    dependencies.io.writeOutput(TAIL_HELP);
+    return 0;
+  }
+  const commandDependencies: TailCommandDependencies = {
+    configurationLoader: dependencies.configurationLoader,
+    documentReader: dependencies.documentReader,
+    io: dependencies.io,
+    now: () => dependencies.clock.now(),
+    environment: dependencies.environment,
+  };
+  return new TailCommand(commandDependencies).run(parsed);
 }
 
 export function parseFixupOptions(

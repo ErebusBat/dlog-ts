@@ -16,6 +16,13 @@ export interface NormalizationResult {
   readonly entries: readonly string[];
 }
 
+export class DailyDocumentReader {
+  public async readLogSection(path: string): Promise<readonly string[]> {
+    const source = await readDailyDocumentFile(path);
+    return selectLogSection(readlines(source)).lines;
+  }
+}
+
 export class DailyDocumentWriter {
   public async fixup(path: string): Promise<boolean> {
     return this.#normalize(path);
@@ -26,17 +33,7 @@ export class DailyDocumentWriter {
   }
 
   async #normalize(path: string, renderedEntry?: string): Promise<boolean> {
-    let metadata;
-    try {
-      metadata = await stat(path);
-    } catch (error) {
-      throw new DlogError(`Daily document does not exist: ${path}`, error);
-    }
-    if (!metadata.isFile()) {
-      throw new DlogError(`Daily document is not a regular file: ${path}`);
-    }
-
-    const source = await readFile(path, "utf8");
+    const source = await readDailyDocumentFile(path);
     const normalized = normalizeDailyDocument(source, renderedEntry);
     if (!normalized.changed) {
       return false;
@@ -51,28 +48,9 @@ export function normalizeDailyDocument(
   renderedEntry?: string,
 ): NormalizationResult {
   const lines = readlines(source);
-  const logHeaderIndex = lines.findIndex((line) => line.trim() === "# Log");
-  if (logHeaderIndex === -1) {
-    throw new DlogError("No '# Log' section found in daily document");
-  }
-
-  const startIndex = logHeaderIndex + 1;
-  let endIndex = startIndex;
-  while (endIndex < lines.length) {
-    const trimmed = lines[endIndex]?.trim() ?? "";
-    if (trimmed.length > 0 && trimmed.startsWith("#")) {
-      break;
-    }
-    endIndex += 1;
-  }
-
-  const originalEntries: string[] = [];
-  for (let index = startIndex; index < endIndex; index += 1) {
-    const trimmed = lines[index]?.trim() ?? "";
-    if (trimmed.length > 0) {
-      originalEntries.push(trimmed);
-    }
-  }
+  const section = selectLogSection(lines);
+  const { startIndex, endIndex } = section;
+  const originalEntries = [...section.lines];
   const originalDigest = arrayDigest(
     originalEntries,
     `count=${endIndex - startIndex - 1}`,
@@ -119,6 +97,51 @@ export function normalizeDailyDocument(
     content: outputParts.join(""),
     entries: normalizedEntries,
   };
+}
+
+interface LogSectionSelection {
+  readonly startIndex: number;
+  readonly endIndex: number;
+  readonly lines: readonly string[];
+}
+
+function selectLogSection(lines: readonly string[]): LogSectionSelection {
+  const logHeaderIndex = lines.findIndex((line) => line.trim() === "# Log");
+  if (logHeaderIndex === -1) {
+    throw new DlogError("No '# Log' section found in daily document");
+  }
+
+  const startIndex = logHeaderIndex + 1;
+  let endIndex = startIndex;
+  while (endIndex < lines.length) {
+    const trimmed = lines[endIndex]?.trim() ?? "";
+    if (trimmed.length > 0 && trimmed.startsWith("#")) {
+      break;
+    }
+    endIndex += 1;
+  }
+
+  const sectionLines: string[] = [];
+  for (let index = startIndex; index < endIndex; index += 1) {
+    const trimmed = lines[index]?.trim() ?? "";
+    if (trimmed.length > 0) {
+      sectionLines.push(trimmed);
+    }
+  }
+  return { startIndex, endIndex, lines: sectionLines };
+}
+
+async function readDailyDocumentFile(path: string): Promise<string> {
+  let metadata;
+  try {
+    metadata = await stat(path);
+  } catch (error) {
+    throw new DlogError(`Daily document does not exist: ${path}`, error);
+  }
+  if (!metadata.isFile()) {
+    throw new DlogError(`Daily document is not a regular file: ${path}`);
+  }
+  return readFile(path, "utf8");
 }
 
 function splitEntries(entries: readonly string[]): string[] {

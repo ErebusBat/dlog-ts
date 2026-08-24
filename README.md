@@ -23,6 +23,7 @@ just compile
 dist/<os>-<arch>/dlog
 dist/<os>-<arch>/dlog-append -> dlog
 dist/<os>-<arch>/dlog-fixup -> dlog
+dist/<os>-<arch>/dlog-tail -> dlog
 ```
 
 `just compile-all` builds the supported macOS ARM64 and Linux x64 targets.
@@ -37,6 +38,8 @@ dlog append Had coffee with Sarah
 dlog append                 # prompts for one line
 dlog fixup                  # normalize once
 dlog fixup --watch          # continue watching
+dlog tail                   # print today's # Log section, formatted
+dlog tail --color=never     # plain text for piping
 ```
 
 The argv0 aliases are equivalent:
@@ -44,6 +47,7 @@ The argv0 aliases are equivalent:
 ```bash
 dlog-append Had coffee with Sarah
 dlog-fixup --watch
+dlog-tail
 ```
 
 Append arguments are joined with one space. Prefix an argument list with `--`

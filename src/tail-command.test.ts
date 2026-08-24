@@ -16,7 +16,7 @@ import {
   type OperationalLogger,
   type WatchClock,
 } from "./fixup-watcher.js";
-import { parseTailOptions } from "./tail-command.js";
+import { parseTailOptions, resolveTailDate } from "./tail-command.js";
 
 const NOW = new Date(2025, 6, 25, 10, 30, 0, 0);
 const temporaryDirectories: string[] = [];
@@ -77,6 +77,65 @@ interface TailFixture {
   readonly io: TestIO;
   readonly dependencies: CliDependencies;
   readonly environment: Record<string, string>;
+}
+
+async function datedTailFixture(
+  documents: Record<string, string>,
+): Promise<TailFixture> {
+  const root = await mkdtemp(join(tmpdir(), "dlog-tail-"));
+  temporaryDirectories.push(root);
+  const vault = join(root, "vault");
+  await mkdir(vault);
+  for (const [name, source] of Object.entries(documents)) {
+    await writeFile(join(vault, name), source, "utf8");
+  }
+  const configPath = join(root, "config.toml");
+  await writeFile(
+    configPath,
+    `schema = "dlog-config/v1"
+vault_roots = [${JSON.stringify(vault)}]
+daily_path = "%Y-%m-%d.md"
+entry_prefix = "- *%H:%M* - "
+`,
+    "utf8",
+  );
+
+  const io = new TestIO();
+  const environment: Record<string, string> = {
+    DLOG_CONFIG: configPath,
+    PATH: process.env["PATH"] ?? "",
+  };
+  const configEnvironment: ConfigurationEnvironment = {
+    cwd: root,
+    homeDirectory: root,
+    variables: environment,
+  };
+  return {
+    documentPath: join(vault, "2025-07-25.md"),
+    io,
+    environment,
+    dependencies: {
+      io,
+      configurationLoader: new ConfigurationLoader({
+        environment: configEnvironment,
+      }),
+      documentReader: new DailyDocumentReader(),
+      documentWriter: new DailyDocumentWriter(),
+      clock: new FixedClock(),
+      hasher: new Sha256FileHasher(),
+      logger: new RecordingLogger(),
+      watchdogScheduler: new SystemWatchdogScheduler(),
+      fatalExit: (status) => {
+        throw new Error(`Unexpected fatal exit ${status}`);
+      },
+      cwd: root,
+      environment,
+    },
+  };
+}
+
+function datedDocument(label: string): string {
+  return `# Log\n\n- *09:00* - ${label}\n`;
 }
 
 async function tailFixture(documentSource: string): Promise<TailFixture> {
@@ -288,6 +347,169 @@ describe("tail CLI conformance", () => {
   });
 });
 
+describe("tail date resolution", () => {
+  const cases: Array<[string, [number, number, number]]> = [
+    ["-0", [2025, 6, 25]],
+    ["-1", [2025, 6, 24]],
+    ["-30", [2025, 5, 25]],
+    ["Fri", [2025, 6, 25]],
+    ["FRIDAY", [2025, 6, 25]],
+    ["Monday", [2025, 6, 21]],
+    ["sun", [2025, 6, 20]],
+    ["9", [2025, 6, 9]],
+    ["25", [2025, 6, 25]],
+    ["0709", [2025, 6, 9]],
+    ["1225", [2025, 11, 25]],
+    ["2025-07-09", [2025, 6, 9]],
+    ["07/09/2025", [2025, 6, 9]],
+    ["July 9 2025", [2025, 6, 9]],
+    ["Aug 9, 2026", [2026, 7, 9]],
+  ];
+
+  for (const [input, [year, month, day]] of cases) {
+    test(`resolves ${input} to ${year}-${month + 1}-${day} at local midnight`, () => {
+      const resolved = resolveTailDate(input, NOW);
+      expect(resolved.getFullYear()).toBe(year);
+      expect(resolved.getMonth()).toBe(month);
+      expect(resolved.getDate()).toBe(day);
+      expect(resolved.getHours()).toBe(0);
+      expect(resolved.getMinutes()).toBe(0);
+    });
+  }
+
+  test("rejects semantically invalid dates without falling through", () => {
+    expect(() => resolveTailDate("0230", NOW)).toThrow("Invalid date: 0230");
+    expect(() => resolveTailDate("2025", NOW)).toThrow("Invalid date: 2025");
+    expect(() => resolveTailDate("32", NOW)).toThrow("Invalid date: 32");
+    expect(() => resolveTailDate("2025-02-30", NOW)).toThrow(
+      "Invalid date: 2025-02-30",
+    );
+  });
+
+  test("rejects unparseable input", () => {
+    expect(() => resolveTailDate("banana", NOW)).toThrow(
+      "Cannot parse date: banana",
+    );
+  });
+});
+
+describe("tail date CLI conformance", () => {
+  test("TAIL-10 selects the document from N days ago", async () => {
+    const fixture = await datedTailFixture({
+      "2025-07-24.md": datedDocument("Yesterday"),
+      "2025-07-25.md": datedDocument("Today"),
+    });
+    const status = await runCli("dlog", ["tail", "-1"], fixture.dependencies);
+
+    expect(status).toBe(0);
+    expect(fixture.io.output).toContain("Yesterday");
+    expect(fixture.io.output).not.toContain("Today");
+  });
+
+  test("TAIL-11 selects weekdays including today, case-insensitively", async () => {
+    const fixture = await datedTailFixture({
+      "2025-07-21.md": datedDocument("Monday entry"),
+      "2025-07-25.md": datedDocument("Friday entry"),
+    });
+
+    expect(await runCli("dlog", ["tail", "Fri"], fixture.dependencies)).toBe(0);
+    expect(fixture.io.output).toContain("Friday entry");
+
+    fixture.io.output = "";
+    expect(
+      await runCli("dlog", ["tail", "monday"], fixture.dependencies),
+    ).toBe(0);
+    expect(fixture.io.output).toContain("Monday entry");
+  });
+
+  test("TAIL-12 selects a day of the current month", async () => {
+    const fixture = await datedTailFixture({
+      "2025-07-09.md": datedDocument("Ninth"),
+    });
+    const status = await runCli("dlog", ["tail", "9"], fixture.dependencies);
+
+    expect(status).toBe(0);
+    expect(fixture.io.output).toContain("Ninth");
+  });
+
+  test("TAIL-13 selects an MMDD date of the current year", async () => {
+    const fixture = await datedTailFixture({
+      "2025-07-09.md": datedDocument("Ninth"),
+    });
+    const status = await runCli(
+      "dlog",
+      ["tail", "0709"],
+      fixture.dependencies,
+    );
+
+    expect(status).toBe(0);
+    expect(fixture.io.output).toContain("Ninth");
+  });
+
+  test("TAIL-14 resolves fallback formats at local midnight", async () => {
+    const fixture = await datedTailFixture({
+      "2025-07-09.md": datedDocument("Ninth"),
+    });
+
+    for (const input of ["2025-07-09", "07/09/2025", "July 9 2025"]) {
+      fixture.io.output = "";
+      expect(await runCli("dlog", ["tail", input], fixture.dependencies)).toBe(
+        0,
+      );
+      expect(fixture.io.output).toContain("Ninth");
+    }
+  });
+
+  test("TAIL-15 and TAIL-16 reject invalid calendar dates", async () => {
+    const fixture = await datedTailFixture({});
+
+    expect(await runCli("dlog", ["tail", "0230"], fixture.dependencies)).toBe(
+      1,
+    );
+    expect(fixture.io.error).toContain("Invalid date: 0230");
+
+    fixture.io.error = "";
+    expect(await runCli("dlog", ["tail", "2025"], fixture.dependencies)).toBe(
+      1,
+    );
+    expect(fixture.io.error).toContain("Invalid date: 2025");
+    expect(fixture.io.output).toBe("");
+  });
+
+  test("TAIL-17 rejects an unparseable date", async () => {
+    const fixture = await datedTailFixture({});
+    const status = await runCli(
+      "dlog",
+      ["tail", "banana"],
+      fixture.dependencies,
+    );
+
+    expect(status).toBe(1);
+    expect(fixture.io.error).toContain("Cannot parse date: banana");
+  });
+
+  test("TAIL-18 fails when the selected document does not exist", async () => {
+    const fixture = await datedTailFixture({
+      "2025-07-25.md": datedDocument("Today"),
+    });
+    const status = await runCli("dlog", ["tail", "-7"], fixture.dependencies);
+
+    expect(status).toBe(1);
+    expect(fixture.io.error).toContain("Daily document does not exist");
+    expect(fixture.io.output).toBe("");
+  });
+
+  test("TAIL-19 accepts -0 as today", async () => {
+    const fixture = await datedTailFixture({
+      "2025-07-25.md": datedDocument("Today"),
+    });
+    const status = await runCli("dlog", ["tail", "-0"], fixture.dependencies);
+
+    expect(status).toBe(0);
+    expect(fixture.io.output).toContain("Today");
+  });
+});
+
 describe("tail option parsing", () => {
   test("parses separated and inline --color values", () => {
     expect(parseTailOptions([])).toEqual({ color: "auto" });
@@ -298,6 +520,24 @@ describe("tail option parsing", () => {
   test("returns help for -h and --help", () => {
     expect(parseTailOptions(["--help"])).toBe("help");
     expect(parseTailOptions(["-h"])).toBe("help");
+  });
+
+  test("accepts a positional date alongside options", () => {
+    expect(parseTailOptions(["-1"])).toEqual({ color: "auto", date: "-1" });
+    expect(parseTailOptions(["--color=never", "mon"])).toEqual({
+      color: "never",
+      date: "mon",
+    });
+    expect(parseTailOptions(["--", "-1"])).toEqual({
+      color: "auto",
+      date: "-1",
+    });
+  });
+
+  test("rejects a second positional argument", () => {
+    expect(() => parseTailOptions(["9", "10"])).toThrow(
+      "Unexpected extra tail argument: 10",
+    );
   });
 
   test("rejects an invalid color value and unknown options", () => {

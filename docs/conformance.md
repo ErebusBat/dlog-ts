@@ -259,6 +259,23 @@ These cases run `dlog tail --color=always` unless stated otherwise, against the 
 | TAIL-08 | The `# Log` section is empty.                                                                           | Standard output is the heading line only.                                                                                                                                  |
 | TAIL-09 | Any document.                                                                                           | After a successful run, the document bytes are identical to before the run.                                                                                                |
 
+### Tail date scenarios
+
+These cases use local time `2025-07-25 10:30:00` (a Friday), a strftime `daily_path` of `%Y-%m-%d.md`, and run `dlog tail` without forced color.
+
+| ID      | Invocation                                                                    | Expected result                                                                                  |
+| ------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| TAIL-10 | `tail -1`; documents exist for 2025-07-24 and 2025-07-25.                      | Display the 2025-07-24 section.                                                                  |
+| TAIL-11 | `tail Fri` and `tail Monday`.                                                  | `Fri` displays today (2025-07-25); `Monday` displays 2025-07-21. Matching is case-insensitive.   |
+| TAIL-12 | `tail 9`.                                                                      | Display the 2025-07-09 section.                                                                  |
+| TAIL-13 | `tail 0709`.                                                                   | Display the 2025-07-09 section.                                                                  |
+| TAIL-14 | `tail 2025-07-09`, `tail 07/09/2025`, `tail "July 9 2025"`.                    | All display the 2025-07-09 section, resolved at local midnight regardless of time zone.          |
+| TAIL-15 | `tail 0230`.                                                                   | Hard error, status nonzero: February 30 does not exist.                                          |
+| TAIL-16 | `tail 2025`.                                                                   | Hard error, status nonzero: the `MMDD` form matched and month 20 is invalid; no year fallback.   |
+| TAIL-17 | `tail banana`.                                                                 | Hard error naming the unparseable input, status nonzero.                                          |
+| TAIL-18 | `tail -7`; no 2025-07-18 document exists.                                      | `Daily document does not exist`, status nonzero, nothing on standard output.                     |
+| TAIL-19 | `tail -0`.                                                                     | Display today's (2025-07-25) section.                                                            |
+
 ## External-tool scenarios
 
 | ID      | Setup                                                                                                    | Expected result                                                                                                                                  |
@@ -307,7 +324,7 @@ the bundled helper is outside its selected scope.
 
 ## Evidence note
 
-The TypeScript suite executes 94 deterministic tests across seven files and
+The TypeScript suite executes 122 deterministic tests across seven files and
 covers every non-Spotify scenario plus the implementation-profile cases above.
 The Ruby behavioral suite used to derive this contract contained 69 examples
 with one known mismatch: an assertion expected a terminal newline after an

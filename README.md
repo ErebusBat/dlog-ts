@@ -40,6 +40,11 @@ dlog fixup                  # normalize once
 dlog fixup --watch          # continue watching
 dlog tail                   # print today's # Log section, formatted
 dlog tail --color=never     # plain text for piping
+dlog tail -1                # yesterday's section
+dlog tail Mon               # most recent Monday (today if Monday)
+dlog tail 9                 # the 9th of this month
+dlog tail 0709              # July 9 of this year
+dlog tail 2026-08-09        # also: 08/09/2026 or "August 9 2026"
 ```
 
 The argv0 aliases are equivalent:

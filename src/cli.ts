@@ -32,10 +32,10 @@ import {
 const ROOT_HELP = `Usage:
   dlog append [--] [WORDS...]
   dlog fixup [OPTIONS]
-  dlog tail [OPTIONS]
+  dlog tail [OPTIONS] [DATE]
   dlog-append [--] [WORDS...]
   dlog-fixup [OPTIONS]
-  dlog-tail [OPTIONS]
+  dlog-tail [OPTIONS] [DATE]
 `;
 
 const APPEND_HELP = `Usage: dlog append [--] [WORDS...]
@@ -55,9 +55,13 @@ Options:
   -h, --help                   Show this help
 `;
 
-const TAIL_HELP = `Usage: dlog tail [OPTIONS]
+const TAIL_HELP = `Usage: dlog tail [OPTIONS] [DATE]
 
-Print today's # Log section with headings, emphasis, and links rendered.
+Print the # Log section with headings, emphasis, and links rendered.
+
+DATE selects the day (default today): -N for N days ago, a weekday (Mon,
+Tuesday), D or DD of this month, MMDD of this year, YYYY-MM-DD, MM/DD/YYYY,
+or a month-name form like "August 9 2026".
 
 Options:
       --color WHEN             Emit ANSI styling: auto, always, never (default auto)

@@ -38,15 +38,15 @@ These cases verify configuration semantics. The configuration format and how a d
 
 ## Input acquisition and append scenarios
 
-| ID     | Invocation                                          | Expected result                                                                     |
-| ------ | --------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| CLI-01 | Positional words: `Had`, `coffee`, `with`, `Sarah`. | Process exactly `Had coffee with Sarah`.                                            |
-| CLI-02 | No words; standard input is `Had coffee\n`.         | Write `Enter Log: `, process `Had coffee`.                                          |
-| CLI-03 | Input is blank or whitespace only.                  | Standard error is `No input, exiting`; status is `1`; document is unchanged.        |
-| CLI-04 | Processing produces a blank rendered entry.         | Standard error is `Entry was blank, exiting`; status is `2`; document is unchanged. |
-| CLI-05 | A normal rendered entry is persisted successfully.  | Print that exact rendered entry to standard output after the write.                 |
-| CLI-06 | Invoke `dlog` without an explicit subcommand.       | Print dispatcher help to standard error and exit nonzero.                           |
-| CLI-07 | Invoke through `dlog-append`, `dlog-fixup`, or `dlog-tail`. | Infer the matching subcommand from argv0.                                 |
+| ID     | Invocation                                                  | Expected result                                                                     |
+| ------ | ----------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| CLI-01 | Positional words: `Had`, `coffee`, `with`, `Sarah`.         | Process exactly `Had coffee with Sarah`.                                            |
+| CLI-02 | No words; standard input is `Had coffee\n`.                 | Write `Enter Log: `, process `Had coffee`.                                          |
+| CLI-03 | Input is blank or whitespace only.                          | Standard error is `No input, exiting`; status is `1`; document is unchanged.        |
+| CLI-04 | Processing produces a blank rendered entry.                 | Standard error is `Entry was blank, exiting`; status is `2`; document is unchanged. |
+| CLI-05 | A normal rendered entry is persisted successfully.          | Print that exact rendered entry to standard output after the write.                 |
+| CLI-06 | Invoke `dlog` without an explicit subcommand.               | Print dispatcher help to standard error and exit nonzero.                           |
+| CLI-07 | Invoke through `dlog-append`, `dlog-fixup`, or `dlog-tail`. | Infer the matching subcommand from argv0.                                           |
 
 ## Entry-processing scenarios
 
@@ -245,36 +245,37 @@ Run fixup. The embedded `*09:45* - Follow up` is extracted and normalized into a
 
 ## Tail display scenarios
 
-These cases run `dlog tail --color=always` unless stated otherwise, against the local day `2025-07-25`. Styled output is described with `ESC` for the ANSI escape character `\x1b`. Tail must never modify the document.
+These cases run `dlog tail --color=always` unless stated otherwise, against the local day `2025-07-25`. Every successful result begins with the plain date line `2025-07-25-Fri\n`, before the rendered `Log` heading; a selected earlier date uses its corresponding date and weekday. Styled output is described with `ESC` for the ANSI escape character `\x1b`. Tail must never modify the document.
 
-| ID      | Setup                                                                                                   | Expected result                                                                                                                                                            |
-| ------- | ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| TAIL-01 | Section contains `- *09:00* - Coffee`.                                                                  | Standard output is `ESC[1;36mLogESC[0m\n- ESC[3m09:00ESC[0m - Coffee\n`; status `0`.                                                                                       |
-| TAIL-02 | Section contains `- *10:30* - Shipped **release** build`.                                               | Entry line renders as `- ESC[3m10:30ESC[0m - Shipped ESC[1mreleaseESC[0m build`.                                                                                            |
-| TAIL-03 | Section contains `- *11:00* - Reviewed [[Page]] and [[Page\|the plan]]; keep [[oops`.                    | `[[Page]]` renders `Page` and `[[Page\|the plan]]` renders `the plan`, each wrapped `ESC[4;34m` … `ESC[0m`; the unterminated `[[oops` renders literally.                     |
-| TAIL-04 | Section contains `- *12:00* - Read [status](https://example.com)`.                                      | Renders `Read ESC[4;34mstatusESC[0m`; the URL is not displayed.                                                                                                            |
-| TAIL-05 | Section contains `- *09:00* - [[Page]]`; run with piped output, with `NO_COLOR=1`, and `--color=never`. | Each run prints the plain form `Log\n- 09:00 - Page\n` with no escape sequences or markup markers. A `--color=always` run overrides `NO_COLOR` and emits the styled form.    |
-| TAIL-06 | Section contains a narrative note, an ordinary `- [ ]` task, and blank lines between entries.           | The note and task lines are displayed trimmed; blank lines are dropped; no lines are filtered, sorted, or deduplicated.                                                      |
-| TAIL-07 | Document has no exact trimmed `# Log` line.                                                             | Fail with a nonzero status, write nothing to standard output, and leave the document untouched.                                                                            |
-| TAIL-08 | The `# Log` section is empty.                                                                           | Standard output is the heading line only.                                                                                                                                  |
-| TAIL-09 | Any document.                                                                                           | After a successful run, the document bytes are identical to before the run.                                                                                                |
+| ID      | Setup                                                                                                   | Expected result                                                                                                                                                                              |
+| ------- | ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| TAIL-01 | Section contains `- *09:00* - Coffee`.                                                                  | Standard output is `2025-07-25-Fri\nESC[1;36mLogESC[0m\n- ESC[3m09:00ESC[0m - Coffee\n`; status `0`.                                                                                         |
+| TAIL-02 | Section contains `- *10:30* - Shipped **release** build`.                                               | Entry line renders as `- ESC[3m10:30ESC[0m - Shipped ESC[1mreleaseESC[0m build`.                                                                                                             |
+| TAIL-03 | Section contains `- *11:00* - Reviewed [[Page]] and [[Page\|the plan]]; keep [[oops`.                   | `[[Page]]` renders `Page` and `[[Page\|the plan]]` renders `the plan`, each wrapped `ESC[4;34m` … `ESC[0m`; the unterminated `[[oops` renders literally.                                     |
+| TAIL-04 | Section contains `- *12:00* - Read [status](https://example.com)`.                                      | Renders `Read ESC[4;34mstatusESC[0m`; the URL is not displayed.                                                                                                                              |
+| TAIL-05 | Section contains `- *09:00* - [[Page]]`; run with piped output, with `NO_COLOR=1`, and `--color=never`. | Each run prints `2025-07-25-Fri\nLog\n- 09:00 - Page\n` with no escape sequences or markup markers. A `--color=always` run overrides `NO_COLOR` and styles the log heading and content only. |
+| TAIL-06 | Section contains a narrative note, an ordinary `- [ ]` task, and blank lines between entries.           | The note and task lines are displayed trimmed; blank lines are dropped; no lines are filtered, sorted, or deduplicated.                                                                      |
+| TAIL-07 | Document has no exact trimmed `# Log` line.                                                             | Fail with a nonzero status, write nothing to standard output, and leave the document untouched.                                                                                              |
+| TAIL-08 | The `# Log` section is empty.                                                                           | Standard output contains the date line followed by the heading line only.                                                                                                                    |
+| TAIL-09 | Any document.                                                                                           | After a successful run, the document bytes are identical to before the run.                                                                                                                  |
 
 ### Tail date scenarios
 
 These cases use local time `2025-07-25 10:30:00` (a Friday), a strftime `daily_path` of `%Y-%m-%d.md`, and run `dlog tail` without forced color.
 
-| ID      | Invocation                                                                    | Expected result                                                                                  |
-| ------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| TAIL-10 | `tail -1`; documents exist for 2025-07-24 and 2025-07-25.                      | Display the 2025-07-24 section.                                                                  |
-| TAIL-11 | `tail Fri` and `tail Monday`.                                                  | `Fri` displays today (2025-07-25); `Monday` displays 2025-07-21. Matching is case-insensitive.   |
-| TAIL-12 | `tail 9`.                                                                      | Display the 2025-07-09 section.                                                                  |
-| TAIL-13 | `tail 0709`.                                                                   | Display the 2025-07-09 section.                                                                  |
-| TAIL-14 | `tail 2025-07-09`, `tail 07/09/2025`, `tail "July 9 2025"`.                    | All display the 2025-07-09 section, resolved at local midnight regardless of time zone.          |
-| TAIL-15 | `tail 0230`.                                                                   | Hard error, status nonzero: February 30 does not exist.                                          |
-| TAIL-16 | `tail 2025`.                                                                   | Hard error, status nonzero: the `MMDD` form matched and month 20 is invalid; no year fallback.   |
-| TAIL-17 | `tail banana`.                                                                 | Hard error naming the unparseable input, status nonzero.                                          |
-| TAIL-18 | `tail -7`; no 2025-07-18 document exists.                                      | `Daily document does not exist`, status nonzero, nothing on standard output.                     |
-| TAIL-19 | `tail -0`.                                                                     | Display today's (2025-07-25) section.                                                            |
+| ID      | Invocation                                                   | Expected result                                                                                                |
+| ------- | ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| TAIL-10 | `tail -1`; documents exist for 2025-07-24 and 2025-07-25.    | Display the 2025-07-24 section.                                                                                |
+| TAIL-11 | `tail Fri` and `tail Monday`.                                | `Fri` displays today (2025-07-25); `Monday` displays 2025-07-21. Matching is case-insensitive.                 |
+| TAIL-12 | `tail 9`.                                                    | Display the 2025-07-09 section.                                                                                |
+| TAIL-13 | `tail 0709`.                                                 | Display the 2025-07-09 section.                                                                                |
+| TAIL-14 | `tail 2025-07-09`, `tail 07/09/2025`, `tail "July 9 2025"`.  | All display the 2025-07-09 section, resolved at local midnight regardless of time zone.                        |
+| TAIL-15 | `tail 0230`.                                                 | Hard error, status nonzero: February 30 does not exist.                                                        |
+| TAIL-16 | `tail 2025`.                                                 | Hard error, status nonzero: the `MMDD` form matched and month 20 is invalid; no year fallback.                 |
+| TAIL-17 | `tail banana`.                                               | Hard error naming the unparseable input, status nonzero.                                                       |
+| TAIL-18 | `tail -7`; no 2025-07-18 document exists.                    | `Daily document does not exist`, status nonzero, nothing on standard output.                                   |
+| TAIL-19 | `tail -0`.                                                   | Display today's (2025-07-25) section.                                                                          |
+| TAIL-20 | `tail -w`; run on Friday 2025-07-25, then Monday 2025-07-21. | Select Thursday 2025-07-24 and Friday 2025-07-18, respectively; each output starts with that date and weekday. |
 
 ## External-tool scenarios
 

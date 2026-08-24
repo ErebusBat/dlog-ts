@@ -64,6 +64,7 @@ Tuesday), D or DD of this month, MMDD of this year, YYYY-MM-DD, MM/DD/YYYY,
 or a month-name form like "August 9 2026".
 
 Options:
+  -w                           Select the previous weekday
       --color WHEN             Emit ANSI styling: auto, always, never (default auto)
   -h, --help                   Show this help
 `;
@@ -137,8 +138,8 @@ export function createDefaultCliDependencies(): CliDependencies {
     configurationLoader: new ConfigurationLoader({
       environment: configurationEnvironment,
     }),
-          documentReader: new DailyDocumentReader(),
-      documentWriter: new DailyDocumentWriter(),
+    documentReader: new DailyDocumentReader(),
+    documentWriter: new DailyDocumentWriter(),
     clock,
     hasher: new Sha256FileHasher(),
     logger: new StandardErrorLogger(clock),

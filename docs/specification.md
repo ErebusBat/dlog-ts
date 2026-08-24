@@ -105,24 +105,24 @@ Use a monotonic clock for polling, throttling, and watchdog timers. Operational 
 
 The tail command is a read-only, one-shot display command. It locates and loads configuration, resolves the selected day's daily document, extracts the `# Log` section, and writes a formatted rendering to standard output. It never modifies the document. Unlike `tail -f`, it has no follow mode; the fixup command owns watching.
 
-1. Locate and load configuration as described in [Configuration discovery](#configuration-discovery) and resolve the selected day's daily document. With no date argument, the selected day is today.
+1. Locate and load configuration as described in [Configuration discovery](#configuration-discovery) and resolve the selected day's daily document. With no date argument or `-w` option, the selected day is today. With `-w`, select the previous weekday: Friday from Saturday, Sunday, or Monday; otherwise, the preceding calendar day.
 2. Extract the section using the same rules as the writer's [Section selection](#section-selection): the first line whose trimmed value is exactly `# Log`, the range up to the next heading or end of file, every line trimmed, blank lines discarded. A missing `# Log` header or a missing document is an error, exactly as for append.
-3. Write the rendered heading line, then one rendered line per extracted section line, in document order. Every written line, including the last, ends with a newline.
+3. Write the selected date as `YYYY-MM-DD-Day`, where `Day` is the three-letter English weekday name. Write the rendered heading line next, then one rendered line per extracted section line, in document order. Every written line, including the last, ends with a newline.
 4. Exit with status `0`.
 
 Tail displays everything in the section. It does not apply the writer's standard-entry filter, sort, split, or duplicate removal; those are write-time normalizations, not display rules.
 
 #### Rendering rules
 
-The heading renders as its text `Log` without the `# ` marker. Each section line renders with this inline markup consumed and styled, following Obsidian display rules:
+The date line always renders as plain text. The heading renders as its text `Log` without the `# ` marker. Each section line renders with this inline markup consumed and styled, following Obsidian display rules:
 
-| Markup                    | Display                                   |
-| ------------------------- | ----------------------------------------- |
-| `**text**`                | `text`, bold                              |
-| `*text*` or `_text_`      | `text`, italic                            |
-| `[[page]]`                | `page`, link style                        |
-| `[[page\|display]]`       | `display`, link style                     |
-| `[text](url)`             | `text`, link style; the URL is not shown  |
+| Markup               | Display                                  |
+| -------------------- | ---------------------------------------- |
+| `**text**`           | `text`, bold                             |
+| `*text*` or `_text_` | `text`, italic                           |
+| `[[page]]`           | `page`, link style                       |
+| `[[page\|display]]`  | `display`, link style                    |
+| `[text](url)`        | `text`, link style; the URL is not shown |
 
 Parsing precedence is links first, then bold, then italic. Unmatched or unterminated markers render literally. Markup inside link display text is not further parsed.
 
@@ -137,27 +137,27 @@ Each span resets with `\x1b[0m` so nesting requires no partial-reset logic.
 
 #### Color policy
 
-The command accepts one option:
+The command accepts these options:
 
-| Option                          | Meaning                                                        | Default |
-| ------------------------------- | -------------------------------------------------------------- | ------- |
-| `--color WHEN`                  | `auto`, `always`, or `never`.                                  | `auto`  |
-
-In `auto` mode, styling is emitted only when standard output is a terminal and the `NO_COLOR` environment variable is unset or blank. `NO_COLOR` forces plain output in `auto` mode; `--color=always` overrides it. Plain output is the display text alone: heading text, link display text, and no markup markers or escape sequences.
+| Option                                                                                                                                                                                                                                                                                                                                  | Meaning                                                      | Default |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ | ------- |
+| `-w`                                                                                                                                                                                                                                                                                                                                    | Select the previous weekday. Cannot be combined with `DATE`. | Off     |
+| `--color WHEN`                                                                                                                                                                                                                                                                                                                          | `auto`, `always`, or `never`.                                | `auto`  |
+| In `auto` mode, styling is emitted only when standard output is a terminal and the `NO_COLOR` environment variable is unset or blank. `NO_COLOR` forces plain output in `auto` mode; `--color=always` overrides it. Plain output is the display text alone: heading text, link display text, and no markup markers or escape sequences. |
 
 #### Date argument
 
-The command accepts one optional positional date argument selecting the day, defaulting to today. A token matching `^-\d+$` is always the date, never an option; `--` ends option parsing. A second positional argument is an error. The argument is resolved in local time against the following forms, tried in order; the first syntactic match wins:
+The command accepts one optional positional date argument selecting the day, defaulting to today. A token matching `^-\d+$` is always the date, never an option; `--` ends option parsing. A second positional argument is an error. The `-w` option and a date argument are mutually exclusive. The argument is resolved in local time against the following forms, tried in order; the first syntactic match wins:
 
-| Form                             | Meaning                                                                            |
-| -------------------------------- | ---------------------------------------------------------------------------------- |
-| `-<digits>`                      | That many days before today. `-0` is today; there is no upper bound.               |
-| Weekday                          | `Mon`–`Sun` or `Monday`–`Sunday`, case-insensitive; the most recent such day, including today. |
-| 1–2 digits                       | Day of the current month and year.                                                 |
-| 4 digits                         | `MMDD` in the current year.                                                        |
-| `YYYY-MM-DD`                     | Calendar date at local midnight, never UTC-shifted.                                |
-| `MM/DD/YYYY`                     | US-order calendar date at local midnight.                                          |
-| Month name                       | Full or three-letter English month, day, and year, with optional comma: `August 9 2026`, `Aug 9, 2026`. |
+| Form         | Meaning                                                                                                 |
+| ------------ | ------------------------------------------------------------------------------------------------------- |
+| `-<digits>`  | That many days before today. `-0` is today; there is no upper bound.                                    |
+| Weekday      | `Mon`–`Sun` or `Monday`–`Sunday`, case-insensitive; the most recent such day, including today.          |
+| 1–2 digits   | Day of the current month and year.                                                                      |
+| 4 digits     | `MMDD` in the current year.                                                                             |
+| `YYYY-MM-DD` | Calendar date at local midnight, never UTC-shifted.                                                     |
+| `MM/DD/YYYY` | US-order calendar date at local midnight.                                                               |
+| Month name   | Full or three-letter English month, day, and year, with optional comma: `August 9 2026`, `Aug 9, 2026`. |
 
 A syntactic match that is semantically invalid — `31` in a 30-day month, `0230`, `2025` as `MMDD` (month 20) — is an error and never falls through to a later form. An argument matching no form is an error naming the unparseable input. A valid date whose daily document does not exist fails exactly as the append command's missing document does.
 

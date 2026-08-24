@@ -53,8 +53,14 @@ class TestIO implements CommandIO {
 }
 
 class FixedClock implements WatchClock {
+  readonly #date: Date;
+
+  public constructor(date: Date = NOW) {
+    this.#date = date;
+  }
+
   public now(): Date {
-    return new Date(NOW);
+    return new Date(this.#date);
   }
 
   public monotonicSeconds(): number {
@@ -81,6 +87,7 @@ interface TailFixture {
 
 async function datedTailFixture(
   documents: Record<string, string>,
+  now: Date = NOW,
 ): Promise<TailFixture> {
   const root = await mkdtemp(join(tmpdir(), "dlog-tail-"));
   temporaryDirectories.push(root);
@@ -121,7 +128,7 @@ entry_prefix = "- *%H:%M* - "
       }),
       documentReader: new DailyDocumentReader(),
       documentWriter: new DailyDocumentWriter(),
-      clock: new FixedClock(),
+      clock: new FixedClock(now),
       hasher: new Sha256FileHasher(),
       logger: new RecordingLogger(),
       watchdogScheduler: new SystemWatchdogScheduler(),
@@ -191,6 +198,7 @@ entry_prefix = "- *%H:%M* - "
 }
 
 const ESC = "\x1b[";
+const DATE_HEADING = "2025-07-25-Fri\n";
 
 describe("tail CLI conformance", () => {
   test("TAIL-01 renders heading and entry with forced styling", async () => {
@@ -203,7 +211,7 @@ describe("tail CLI conformance", () => {
 
     expect(status).toBe(0);
     expect(fixture.io.output).toBe(
-      `${ESC}1;36mLog${ESC}0m\n- ${ESC}3m09:00${ESC}0m - Coffee\n`,
+      `${DATE_HEADING}${ESC}1;36mLog${ESC}0m\n- ${ESC}3m09:00${ESC}0m - Coffee\n`,
     );
   });
 
@@ -219,7 +227,7 @@ describe("tail CLI conformance", () => {
 
     expect(status).toBe(0);
     expect(fixture.io.output).toBe(
-      `${ESC}1;36mLog${ESC}0m\n- ${ESC}3m10:30${ESC}0m - Shipped ${ESC}1mrelease${ESC}0m build\n`,
+      `${DATE_HEADING}${ESC}1;36mLog${ESC}0m\n- ${ESC}3m10:30${ESC}0m - Shipped ${ESC}1mrelease${ESC}0m build\n`,
     );
   });
 
@@ -235,7 +243,7 @@ describe("tail CLI conformance", () => {
 
     expect(status).toBe(0);
     expect(fixture.io.output).toBe(
-      `${ESC}1;36mLog${ESC}0m\n- ${ESC}3m11:00${ESC}0m - Reviewed ${ESC}4;34mPage${ESC}0m and ${ESC}4;34mthe plan${ESC}0m; keep [[oops\n`,
+      `${DATE_HEADING}${ESC}1;36mLog${ESC}0m\n- ${ESC}3m11:00${ESC}0m - Reviewed ${ESC}4;34mPage${ESC}0m and ${ESC}4;34mthe plan${ESC}0m; keep [[oops\n`,
     );
   });
 
@@ -251,13 +259,13 @@ describe("tail CLI conformance", () => {
 
     expect(status).toBe(0);
     expect(fixture.io.output).toBe(
-      `${ESC}1;36mLog${ESC}0m\n- ${ESC}3m12:00${ESC}0m - Read ${ESC}4;34mstatus${ESC}0m\n`,
+      `${DATE_HEADING}${ESC}1;36mLog${ESC}0m\n- ${ESC}3m12:00${ESC}0m - Read ${ESC}4;34mstatus${ESC}0m\n`,
     );
   });
 
   test("TAIL-05 auto, NO_COLOR, and never produce plain output; always overrides", async () => {
     const source = "# Log\n\n- *09:00* - [[Page]]\n";
-    const plain = "Log\n- 09:00 - Page\n";
+    const plain = `${DATE_HEADING}Log\n- 09:00 - Page\n`;
 
     const piped = await tailFixture(source);
     expect(await runCli("dlog", ["tail"], piped.dependencies)).toBe(0);
@@ -292,7 +300,7 @@ describe("tail CLI conformance", () => {
 
     expect(status).toBe(0);
     expect(fixture.io.output).toBe(
-      "Log\nNarrative note\n- [ ] ordinary task\n- 09:00 - Retained\n",
+      `${DATE_HEADING}Log\nNarrative note\n- [ ] ordinary task\n- 09:00 - Retained\n`,
     );
   });
 
@@ -312,7 +320,7 @@ describe("tail CLI conformance", () => {
     const status = await runCli("dlog", ["tail"], fixture.dependencies);
 
     expect(status).toBe(0);
-    expect(fixture.io.output).toBe("Log\n");
+    expect(fixture.io.output).toBe(`${DATE_HEADING}Log\n`);
   });
 
   test("TAIL-09 never modifies the document", async () => {
@@ -416,9 +424,9 @@ describe("tail date CLI conformance", () => {
     expect(fixture.io.output).toContain("Friday entry");
 
     fixture.io.output = "";
-    expect(
-      await runCli("dlog", ["tail", "monday"], fixture.dependencies),
-    ).toBe(0);
+    expect(await runCli("dlog", ["tail", "monday"], fixture.dependencies)).toBe(
+      0,
+    );
     expect(fixture.io.output).toContain("Monday entry");
   });
 
@@ -436,11 +444,7 @@ describe("tail date CLI conformance", () => {
     const fixture = await datedTailFixture({
       "2025-07-09.md": datedDocument("Ninth"),
     });
-    const status = await runCli(
-      "dlog",
-      ["tail", "0709"],
-      fixture.dependencies,
-    );
+    const status = await runCli("dlog", ["tail", "0709"], fixture.dependencies);
 
     expect(status).toBe(0);
     expect(fixture.io.output).toContain("Ninth");
@@ -508,13 +512,38 @@ describe("tail date CLI conformance", () => {
     expect(status).toBe(0);
     expect(fixture.io.output).toContain("Today");
   });
+  test("TAIL-20 -w selects the previous weekday on Friday and Monday", async () => {
+    const friday = await datedTailFixture({
+      "2025-07-24.md": datedDocument("Thursday entry"),
+    });
+    expect(await runCli("dlog", ["tail", "-w"], friday.dependencies)).toBe(0);
+    expect(friday.io.output).toStartWith("2025-07-24-Thu\nLog\n");
+    expect(friday.io.output).toContain("Thursday entry");
+
+    const monday = await datedTailFixture(
+      { "2025-07-18.md": datedDocument("Previous Friday entry") },
+      new Date(2025, 6, 21, 10, 30, 0, 0),
+    );
+    expect(await runCli("dlog", ["tail", "-w"], monday.dependencies)).toBe(0);
+    expect(monday.io.output).toStartWith("2025-07-18-Fri\nLog\n");
+    expect(monday.io.output).toContain("Previous Friday entry");
+  });
 });
 
 describe("tail option parsing", () => {
   test("parses separated and inline --color values", () => {
-    expect(parseTailOptions([])).toEqual({ color: "auto" });
-    expect(parseTailOptions(["--color", "never"])).toEqual({ color: "never" });
-    expect(parseTailOptions(["--color=always"])).toEqual({ color: "always" });
+    expect(parseTailOptions([])).toEqual({
+      color: "auto",
+      previousWeekday: false,
+    });
+    expect(parseTailOptions(["--color", "never"])).toEqual({
+      color: "never",
+      previousWeekday: false,
+    });
+    expect(parseTailOptions(["--color=always"])).toEqual({
+      color: "always",
+      previousWeekday: false,
+    });
   });
 
   test("returns help for -h and --help", () => {
@@ -523,15 +552,31 @@ describe("tail option parsing", () => {
   });
 
   test("accepts a positional date alongside options", () => {
-    expect(parseTailOptions(["-1"])).toEqual({ color: "auto", date: "-1" });
+    expect(parseTailOptions(["-1"])).toEqual({
+      color: "auto",
+      previousWeekday: false,
+      date: "-1",
+    });
     expect(parseTailOptions(["--color=never", "mon"])).toEqual({
       color: "never",
+      previousWeekday: false,
       date: "mon",
     });
     expect(parseTailOptions(["--", "-1"])).toEqual({
       color: "auto",
+      previousWeekday: false,
       date: "-1",
     });
+  });
+
+  test("parses -w and rejects combining it with a date", () => {
+    expect(parseTailOptions(["-w"])).toEqual({
+      color: "auto",
+      previousWeekday: true,
+    });
+    expect(() => parseTailOptions(["-w", "-1"])).toThrow(
+      "Option -w cannot be combined with a date argument",
+    );
   });
 
   test("rejects a second positional argument", () => {

@@ -10,6 +10,7 @@ export type TailColorMode = "auto" | "always" | "never";
 
 export interface TailOptions {
   readonly color: TailColorMode;
+  readonly previousWeekday: boolean;
   readonly date?: string;
 }
 
@@ -33,11 +34,9 @@ export class TailCommand {
   }
 
   public async run(options: TailOptions): Promise<number> {
-    const configuration =
-      await this.#dependencies.configurationLoader.load();
+    const configuration = await this.#dependencies.configurationLoader.load();
     const now = this.#dependencies.now();
-    const day =
-      options.date === undefined ? now : resolveTailDate(options.date, now);
+    const day = selectTailDate(options, now);
     const path = dailyDocumentPath(configuration, day);
     const lines = await this.#dependencies.documentReader.readLogSection(path);
     const styled = shouldStyle(
@@ -45,7 +44,9 @@ export class TailCommand {
       this.#dependencies.io.isOutputTerminal(),
       this.#dependencies.environment,
     );
-    this.#dependencies.io.writeOutput(renderLogSection(lines, styled));
+    this.#dependencies.io.writeOutput(
+      `${formatTailDate(day)}\n${renderLogSection(lines, styled)}`,
+    );
     return 0;
   }
 }
@@ -54,6 +55,7 @@ export function parseTailOptions(
   arguments_: readonly string[],
 ): TailOptions | "help" {
   let color: TailColorMode = "auto";
+  let previousWeekday = false;
   let date: string | undefined;
   let optionsEnded = false;
 
@@ -70,6 +72,10 @@ export function parseTailOptions(
       }
       if (argument === "-h" || argument === "--help") {
         return "help";
+      }
+      if (argument === "-w") {
+        previousWeekday = true;
+        continue;
       }
 
       const inlineValue = /^--color=(.*)$/.exec(argument);
@@ -101,7 +107,41 @@ export function parseTailOptions(
     date = argument;
   }
 
-  return date === undefined ? { color } : { color, date };
+  if (previousWeekday && date !== undefined) {
+    throw new DlogError("Option -w cannot be combined with a date argument");
+  }
+
+  const options = { color, previousWeekday };
+  return date === undefined ? options : { ...options, date };
+}
+
+const WEEKDAY_ABBREVIATIONS = [
+  "Sun",
+  "Mon",
+  "Tue",
+  "Wed",
+  "Thu",
+  "Fri",
+  "Sat",
+] as const;
+
+function selectTailDate(options: TailOptions, now: Date): Date {
+  if (options.previousWeekday) {
+    const daysBack = now.getDay() === 1 ? 3 : now.getDay() === 0 ? 2 : 1;
+    return new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate() - daysBack,
+    );
+  }
+  return options.date === undefined ? now : resolveTailDate(options.date, now);
+}
+
+export function formatTailDate(day: Date): string {
+  const year = day.getFullYear();
+  const month = String(day.getMonth() + 1).padStart(2, "0");
+  const date = String(day.getDate()).padStart(2, "0");
+  return `${year}-${month}-${date}-${WEEKDAY_ABBREVIATIONS[day.getDay()]}`;
 }
 
 const WEEKDAY_INDEX: Record<string, number> = {
@@ -162,11 +202,7 @@ export function resolveTailDate(input: string, now: Date): Date {
   const weekday = WEEKDAY_INDEX[text.toLowerCase()];
   if (weekday !== undefined) {
     const delta = (now.getDay() - weekday + 7) % 7;
-    return new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      now.getDate() - delta,
-    );
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate() - delta);
   }
 
   if (/^\d{1,2}$/.test(text)) {
@@ -288,10 +324,8 @@ export function renderTailLine(line: string, styled: boolean): string {
 }
 
 function renderEmphasis(text: string, styled: boolean): string {
-  const bold = text.replace(
-    /\*\*([^*]+)\*\*/g,
-    (_match, content: string) =>
-      styled ? `\x1b[1m${content}${SGR_RESET}` : content,
+  const bold = text.replace(/\*\*([^*]+)\*\*/g, (_match, content: string) =>
+    styled ? `\x1b[1m${content}${SGR_RESET}` : content,
   );
   return bold
     .replace(/\*([^*]+)\*/g, (_match, content: string) =>

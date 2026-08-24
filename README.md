@@ -38,8 +38,9 @@ dlog append Had coffee with Sarah
 dlog append                 # prompts for one line
 dlog fixup                  # normalize once
 dlog fixup --watch          # continue watching
-dlog tail                   # print today's # Log section, formatted
-dlog tail --color=never     # plain text for piping
+dlog tail                   # print today's date and formatted # Log section
+dlog tail --color=never     # plain log formatting for piping
+dlog tail -w                # previous weekday (Monday selects Friday)
 dlog tail -1                # yesterday's section
 dlog tail Mon               # most recent Monday (today if Monday)
 dlog tail 9                 # the 9th of this month

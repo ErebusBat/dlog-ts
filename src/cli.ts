@@ -36,20 +36,22 @@ import {
 import { ThemeLoader, type ThemeProvider } from "./theme.js";
 
 const ROOT_HELP = `Usage:
-  dlog append [--] [WORDS...]
+  dlog append [--no-write] [--] [WORDS...]
   dlog fixup [OPTIONS]
   dlog tail [OPTIONS] [DATE]
   dlog theme [OPTIONS]
-  dlog-append [--] [WORDS...]
+  dlog-append [--no-write] [--] [WORDS...]
   dlog-fixup [OPTIONS]
   dlog-tail [OPTIONS] [DATE]
 `;
 
-const APPEND_HELP = `Usage: dlog append [--] [WORDS...]
+const APPEND_HELP = `Usage: dlog append [OPTIONS] [WORDS...]
 
-With no words, prompt for one line on standard input.
+Options:
+      --no-write         Do not write to the daily document. A warning is printed to stderr.
+
+With no words, write Enter Log: , read one standard-input line, and trim it.
 `;
-
 const FIXUP_HELP = `Usage: dlog fixup [OPTIONS]
 
 Options:
@@ -90,6 +92,7 @@ Options:
       --color WHEN               Emit ANSI styling: auto, always, never (default auto)
   -h, --help                     Show this help
 `;
+
 
 export interface CliDependencies {
   readonly io: CommandIO;
@@ -189,11 +192,11 @@ async function runAppend(
   arguments_: readonly string[],
   dependencies: CliDependencies,
 ): Promise<number> {
-  if (arguments_[0] === "--help" || arguments_[0] === "-h") {
+  const parsed = parseAppendOptions(arguments_);
+  if (parsed === "help") {
     dependencies.io.writeOutput(APPEND_HELP);
     return 0;
   }
-  const words = arguments_[0] === "--" ? arguments_.slice(1) : arguments_;
   return new AppendCommand({
     configurationLoader: dependencies.configurationLoader,
     documentWriter: dependencies.documentWriter,
@@ -201,9 +204,43 @@ async function runAppend(
     now: () => dependencies.clock.now(),
     cwd: dependencies.cwd,
     environment: dependencies.environment,
-  }).run(words);
+    noWrite: parsed.noWrite,
+  }).run(parsed.words);
 }
 
+interface AppendOptions {
+  readonly noWrite: boolean;
+  readonly words: readonly string[];
+}
+
+function parseAppendOptions(
+  arguments_: readonly string[],
+): AppendOptions | "help" {
+  let noWrite = false;
+  let index = 0;
+  const words: string[] = [];
+  for (; index < arguments_.length; index += 1) {
+    const argument = arguments_[index];
+    if (argument === undefined) {
+      continue;
+    }
+    if (argument === "--") {
+      words.push(...arguments_.slice(index + 1));
+      return { noWrite, words };
+    }
+    if (argument === "--help" || argument === "-h") {
+      return "help";
+    }
+    if (argument === "--no-write") {
+      noWrite = true;
+      continue;
+    }
+
+    break;
+  }
+  words.push(...arguments_.slice(index));
+  return { noWrite, words };
+}
 async function runFixup(
   arguments_: readonly string[],
   dependencies: CliDependencies,

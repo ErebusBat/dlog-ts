@@ -67,7 +67,11 @@ requiring `append`, `fixup`, or `tail`. Symlinks named `dlog-append`,
 
 ### Append command
 
-The primary command accepts zero or more positional words.
+Usage supports this option:
+
+* `--no-write`: process and render a would-be append entry, but do not write to the daily document.
+
+The invocation rules are:
 
 1. With one or more words, join all words with single spaces to form the input.
 2. With no words, write `Enter Log: ` to standard output, read one standard-input line, and trim it.
@@ -78,10 +82,11 @@ The primary command accepts zero or more positional words.
 7. Append and normalize today's daily document.
 8. Write the rendered entry, without additional decoration, to standard output.
 
+If `--no-write` is set, step 7 is skipped, and a warning is emitted to standard error before the rendered output.
+
 The normal success path does not expose a separate success status; standard process status `0` is expected. Configuration, vault, document, and callback failures propagate as errors rather than being converted to structured CLI error messages.
 
 There is no option to select another date. Appending always uses the local current day.
-
 ### Fixup command
 
 The secondary command normalizes the `# Log` section without adding an entry. It has two modes:

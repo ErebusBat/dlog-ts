@@ -1,5 +1,7 @@
+import { Ansis } from "ansis";
 import { createInterface } from "node:readline";
 
+import { resolveColorLevel } from "./theme.js";
 import {
   ConfigurationLoader,
   dailyDocumentPath,
@@ -9,6 +11,18 @@ import {
 import { DailyDocumentWriter } from "./daily-document.js";
 import { EntryProcessor } from "./entry-processor.js";
 import { ExternalToolRunner, PluginExecutor } from "./external-tools.js";
+
+const NO_WRITE_WARNING_TEXT =
+  "Warning: --no-write is set; this entry was not written to the daily document.";
+
+function colorizeNoWriteWarning(
+  text: string,
+  outputIsTerminal: boolean,
+  environment: Readonly<NodeJS.ProcessEnv>,
+): string {
+  const level = resolveColorLevel("auto", outputIsTerminal, environment);
+  return level === 0 ? text : new Ansis(level).yellow(text);
+}
 
 export interface CommandIO {
   writeOutput(value: string): void;
@@ -24,7 +38,9 @@ export interface AppendCommandDependencies {
   readonly now: () => Date;
   readonly cwd: string;
   readonly environment: Readonly<NodeJS.ProcessEnv>;
+  readonly noWrite?: boolean;
 }
+
 
 export class AppendCommand {
   readonly #dependencies: AppendCommandDependencies;
@@ -59,10 +75,20 @@ export class AppendCommand {
     }
 
     const path = dailyDocumentPath(configuration, processed.timestamp);
-    await this.#dependencies.documentWriter.append(
-      path,
-      processed.renderedEntry,
-    );
+    if (this.#dependencies.noWrite !== true) {
+      await this.#dependencies.documentWriter.append(
+        path,
+        processed.renderedEntry,
+      );
+    } else {
+      this.#dependencies.io.writeError(
+        `${colorizeNoWriteWarning(
+          NO_WRITE_WARNING_TEXT,
+          this.#dependencies.io.isOutputTerminal(),
+          this.#dependencies.environment,
+        )}\n`,
+      );
+    }
     this.#dependencies.io.writeOutput(`${processed.renderedEntry}\n`);
     return 0;
   }

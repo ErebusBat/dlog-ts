@@ -223,6 +223,61 @@ path = "rules.toml"
     );
   });
 
+  test("CLI-06 does not write when --no-write is set", async () => {
+    const fixture = await cliFixture();
+    const before = await readFile(fixture.documentPath, "utf8");
+    const status = await runCli(
+      "dlog",
+      ["append", "--no-write", "Persisted", "without", "write"],
+      fixture.dependencies,
+    );
+
+    expect(status).toBe(0);
+    expect(fixture.io.output).toBe(
+      "- *10:30* - Persisted without write\n",
+    );
+    expect(fixture.io.error).toBe(
+      "Warning: --no-write is set; this entry was not written to the daily document.\n",
+    );
+    expect(await readFile(fixture.documentPath, "utf8")).toBe(before);
+  });
+
+  test("CLI-07 colorizes the no-write warning when forced", async () => {
+    const fixture = await cliFixture();
+    fixture.io.outputIsTerminal = true;
+    const dependencies = {
+      ...fixture.dependencies,
+      environment: {
+        ...fixture.dependencies.environment,
+        FORCE_COLOR: "1",
+      },
+    };
+    const status = await runCli(
+      "dlog",
+      ["append", "--no-write", "Colorful"],
+      dependencies,
+    );
+
+    expect(status).toBe(0);
+    expect(fixture.io.output).toBe("- *10:30* - Colorful\n");
+    expect(fixture.io.error).toContain("\x1b[");
+    expect(fixture.io.error).toContain(
+      "Warning: --no-write is set; this entry was not written to the daily document.",
+    );
+  });
+
+  test("CLI-08 keeps entry text that starts with option-looking words when -- is used", async () => {
+    const fixture = await cliFixture();
+    const status = await runCli(
+      "dlog",
+      ["append", "--", "--help", "entry"],
+      fixture.dependencies,
+    );
+
+    expect(status).toBe(0);
+    expect(fixture.io.output).toBe("- *10:30* - --help entry\n");
+  });
+
   test("strict dispatcher rejects a missing subcommand", async () => {
     const fixture = await cliFixture();
     expect(await runCli("dlog", [], fixture.dependencies)).toBe(1);

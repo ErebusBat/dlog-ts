@@ -43,11 +43,10 @@ These cases verify configuration semantics. The configuration format and how a d
 | CLI-01 | Positional words: `Had`, `coffee`, `with`, `Sarah`.         | Process exactly `Had coffee with Sarah`.                                            |
 | CLI-02 | No words; standard input is `Had coffee\n`.                 | Write `Enter Log: `, process `Had coffee`.                                          |
 | CLI-03 | Input is blank or whitespace only.                          | Standard error is `No input, exiting`; status is `1`; document is unchanged.        |
-| CLI-04 | Processing produces a blank rendered entry.                 | Standard error is `Entry was blank, exiting`; status is `2`; document is unchanged. |
 | CLI-05 | A normal rendered entry is persisted successfully.          | Print that exact rendered entry to standard output after the write.                 |
-| CLI-06 | Invoke `dlog` without an explicit subcommand.               | Print dispatcher help to standard error and exit nonzero.                           |
-| CLI-07 | Invoke through `dlog-append`, `dlog-fixup`, or `dlog-tail`. | Infer the matching subcommand from argv0.                                           |
-
+| CLI-06 | `--no-write` is provided with text content.                  | Status is `0`, output is the rendered entry, stderr contains `--no-write` warning, and the document is unchanged. |
+| CLI-07 | Invoke `dlog` without an explicit subcommand.               | Print dispatcher help to standard error and exit nonzero.                           |
+| CLI-08 | Invoke through `dlog-append`, `dlog-fixup`, or `dlog-tail`. | Infer the matching subcommand from argv0.                                           |
 ## Entry-processing scenarios
 
 Configure these ordered rules unless a case says otherwise:

@@ -87,12 +87,38 @@ Tail options:
 ```text
 -w
 -f, --follow
+    --truncate
+    --no-truncate
+    --width COLUMNS
     --color auto|always|never
 ```
 
-With `--follow`, a default-today tail follows the local date across midnight.
-If the new daily document does not exist yet, the previous log remains visible
-until the new document appears.
+With `--width`, each rendered line is truncated to that many display columns and
+ends with `…` when needed.
+
+With `--truncate`, truncation also uses the terminal width, then `COLUMNS`, then
+explicit `--width`.
+
+The `--truncate` option requires a measurable width (a terminal width, `COLUMNS`,
+or `--width`), otherwise tail exits with an error.
+
+Truncation is width-safe for ANSI styling, tabs, and wide glyphs.
+
+The command can also be configured in `[tail]`:
+
+```toml
+[tail]
+truncate = false
+width = 80
+```
+
+`width` applies only when truncation is enabled.
+CLI `--width` forces truncation and `--no-truncate` disables truncation regardless
+of config.
+
+With `--follow`, a default-today tail follows the local date across midnight. If
+the new document does not exist yet, the prior display remains until the new
+document appears.
 
 ## Application configuration
 
@@ -119,10 +145,14 @@ daily_path = "logs/%Y/%m-%b/%Y-%m-%d-%a.md"
 entry_prefix = "- *%H:%M* - "
 theme = "theme.toml" # optional; relative to this config
 
+# Optional tail display defaults.
+[tail]
+truncate = false
+width = 80 # optional
+
 [[includes]]
 path = "rules"
 # enabled = true
-```
 
 Path fields expand `~`, `$NAME`, and `${NAME}`. An unset variable is an error.
 The selected daily document must already exist and be a regular file.

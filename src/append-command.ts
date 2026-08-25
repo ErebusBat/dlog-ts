@@ -29,6 +29,7 @@ export interface CommandIO {
   writeError(value: string): void;
   readLine(): Promise<string>;
   isOutputTerminal(): boolean;
+  outputColumns(): number | undefined;
 }
 
 export interface AppendCommandDependencies {
@@ -108,6 +109,9 @@ export class AppendCommand {
 export class ProcessCommandIO implements CommandIO {
   public isOutputTerminal(): boolean {
     return process.stdout.isTTY === true;
+  }
+  public outputColumns(): number | undefined {
+    return process.stdout.isTTY === true ? process.stdout.columns : undefined;
   }
 
   public writeOutput(value: string): void {

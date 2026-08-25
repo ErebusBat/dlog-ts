@@ -16,7 +16,11 @@ import {
   type OperationalLogger,
   type WatchClock,
 } from "./fixup-watcher.js";
-import { parseTailOptions, resolveTailDate } from "./tail-command.js";
+import {
+  displayWidth,
+  parseTailOptions,
+  resolveTailDate,
+} from "./tail-command.js";
 import { ThemeLoader } from "./theme.js";
 
 const NOW = new Date(2025, 6, 25, 10, 30, 0, 0);
@@ -35,9 +39,14 @@ class TestIO implements CommandIO {
   public error = "";
   public input = "";
   public outputIsTerminal = false;
+  public columns: number | undefined;
 
   public isOutputTerminal(): boolean {
     return this.outputIsTerminal;
+  }
+
+  public outputColumns(): number | undefined {
+    return this.columns;
   }
 
   public writeOutput(value: string): void {
@@ -114,6 +123,7 @@ async function datedTailFixture(
   now: Date = NOW,
   clock: WatchClock = new FixedClock(now),
   keepWatching: () => boolean = () => false,
+  tailConfig = "",
 ): Promise<TailFixture> {
   const root = await mkdtemp(join(tmpdir(), "dlog-tail-"));
   temporaryDirectories.push(root);
@@ -129,7 +139,7 @@ async function datedTailFixture(
 vault_roots = [${JSON.stringify(vault)}]
 daily_path = "%Y-%m-%d.md"
 entry_prefix = "- *%H:%M* - "
-`,
+${tailConfig}`,
     "utf8",
   );
 
@@ -178,7 +188,10 @@ function datedDocument(label: string): string {
   return `# Log\n\n- *09:00* - ${label}\n`;
 }
 
-async function tailFixture(documentSource: string): Promise<TailFixture> {
+async function tailFixture(
+  documentSource: string,
+  tailConfig = "",
+): Promise<TailFixture> {
   const root = await mkdtemp(join(tmpdir(), "dlog-tail-"));
   temporaryDirectories.push(root);
   const vault = join(root, "vault");
@@ -192,7 +205,7 @@ async function tailFixture(documentSource: string): Promise<TailFixture> {
 vault_roots = [${JSON.stringify(vault)}]
 daily_path = "daily.md"
 entry_prefix = "- *%H:%M* - "
-`,
+${tailConfig}`,
     "utf8",
   );
 
@@ -510,6 +523,256 @@ describe("tail follow conformance", () => {
   });
 });
 
+describe("tail truncation conformance", () => {
+  const LONG_DOCUMENT =
+    "# Log\n\n- *09:00* - Coffee and a very long conversation about things\n";
+
+  test("TAIL-24 truncates every emitted line wider than --width", async () => {
+    const fixture = await tailFixture(LONG_DOCUMENT);
+    const status = await runCli(
+      "dlog",
+      ["tail", "--color=never", "--width", "20"],
+      fixture.dependencies,
+    );
+
+    expect(status).toBe(0);
+    expect(fixture.io.output).toBe(
+      "2025-07-25-Fri\nLog\n- 09:00 - Coffee an…\n",
+    );
+
+    const narrow = await tailFixture(LONG_DOCUMENT);
+    expect(
+      await runCli(
+        "dlog",
+        ["tail", "--color=never", "--width", "10"],
+        narrow.dependencies,
+      ),
+    ).toBe(0);
+    expect(narrow.io.output).toBe("2025-07-2…\nLog\n- 09:00 -…\n");
+  });
+
+  test("TAIL-25 ignores ANSI styling in width and resets a truncated styled line", async () => {
+    const fixture = await tailFixture(LONG_DOCUMENT);
+    const status = await runCli(
+      "dlog",
+      ["tail", "--color=always", "--width", "15"],
+      fixture.dependencies,
+    );
+
+    expect(status).toBe(0);
+    expect(fixture.io.output).toBe(
+      `${STYLED_DATE_HEADING}${STYLED_HEADING}${STYLED_MARKER} ${styledTime(
+        "09:00",
+      )} ${STYLED_SEPARATOR} Coff${ESC}0m…${ESC}0m\n`,
+    );
+    for (const line of fixture.io.output.split("\n")) {
+      expect(displayWidth(line)).toBeLessThanOrEqual(15);
+    }
+  });
+
+  test("TAIL-26 resolves truncate policy by the last matching flag", async () => {
+    const off = await tailFixture(LONG_DOCUMENT);
+    expect(
+      await runCli(
+        "dlog",
+        ["tail", "--color=never", "--width", "20", "--no-truncate"],
+        off.dependencies,
+      ),
+    ).toBe(0);
+    expect(off.io.output).toBe(
+      "2025-07-25-Fri\nLog\n- 09:00 - Coffee and a very long conversation about things\n",
+    );
+
+    const on = await tailFixture(LONG_DOCUMENT);
+    expect(
+      await runCli(
+        "dlog",
+        ["tail", "--color=never", "--no-truncate", "--width", "20"],
+        on.dependencies,
+      ),
+    ).toBe(0);
+    expect(on.io.output).toBe("2025-07-25-Fri\nLog\n- 09:00 - Coffee an…\n");
+  });
+
+  test("TAIL-27 applies [tail] configuration with CLI precedence", async () => {
+    const tailConfig = "[tail]\ntruncate = true\n";
+
+    const piped = await tailFixture(LONG_DOCUMENT, tailConfig);
+    expect(
+      await runCli("dlog", ["tail", "--color=never"], piped.dependencies),
+    ).toBe(0);
+    expect(piped.io.output).toBe(
+      "2025-07-25-Fri\nLog\n- 09:00 - Coffee and a very long conversation about things\n",
+    );
+    expect(piped.io.error).toBe("");
+
+    const terminal = await tailFixture(LONG_DOCUMENT, tailConfig);
+    terminal.io.outputIsTerminal = true;
+    terminal.io.columns = 20;
+    expect(
+      await runCli("dlog", ["tail", "--color=never"], terminal.dependencies),
+    ).toBe(0);
+    expect(terminal.io.output).toBe(
+      "2025-07-25-Fri\nLog\n- 09:00 - Coffee an…\n",
+    );
+
+    const overridden = await tailFixture(LONG_DOCUMENT, tailConfig);
+    overridden.io.outputIsTerminal = true;
+    overridden.io.columns = 20;
+    expect(
+      await runCli(
+        "dlog",
+        ["tail", "--color=never", "--no-truncate"],
+        overridden.dependencies,
+      ),
+    ).toBe(0);
+    expect(overridden.io.output).toBe(
+      "2025-07-25-Fri\nLog\n- 09:00 - Coffee and a very long conversation about things\n",
+    );
+
+    const configuredWidth = await tailFixture(
+      LONG_DOCUMENT,
+      "[tail]\ntruncate = true\nwidth = 20\n",
+    );
+    configuredWidth.io.outputIsTerminal = true;
+    configuredWidth.io.columns = 40;
+    expect(
+      await runCli(
+        "dlog",
+        ["tail", "--color=never"],
+        configuredWidth.dependencies,
+      ),
+    ).toBe(0);
+    expect(configuredWidth.io.output).toBe(
+      "2025-07-25-Fri\nLog\n- 09:00 - Coffee an…\n",
+    );
+
+    const cliWidth = await tailFixture(
+      LONG_DOCUMENT,
+      "[tail]\nwidth = 20\n",
+    );
+    expect(
+      await runCli(
+        "dlog",
+        ["tail", "--color=never", "--width", "10"],
+        cliWidth.dependencies,
+      ),
+    ).toBe(0);
+    expect(cliWidth.io.output).toBe("2025-07-2…\nLog\n- 09:00 -…\n");
+  });
+
+  test("TAIL-28 fails CLI truncation without a measurable width", async () => {
+    const fixture = await tailFixture(LONG_DOCUMENT);
+    const status = await runCli(
+      "dlog",
+      ["tail", "--color=never", "--truncate"],
+      fixture.dependencies,
+    );
+
+    expect(status).toBe(1);
+    expect(fixture.io.output).toBe("");
+    expect(fixture.io.error).toBe(
+      "dlog: Option --truncate requires a measurable width; pass --width COLUMNS\n",
+    );
+
+    const columns = await tailFixture(LONG_DOCUMENT);
+    columns.environment["COLUMNS"] = "20";
+    expect(
+      await runCli("dlog", ["tail", "--color=never", "-t"], columns.dependencies),
+    ).toBe(0);
+    expect(columns.io.output).toBe(
+      "2025-07-25-Fri\nLog\n- 09:00 - Coffee an…\n",
+    );
+
+    const invalid = await tailFixture(LONG_DOCUMENT);
+    invalid.environment["COLUMNS"] = "abc";
+    expect(
+      await runCli(
+        "dlog",
+        ["tail", "--color=never", "-t"],
+        invalid.dependencies,
+      ),
+    ).toBe(1);
+    expect(invalid.io.error).toContain("requires a measurable width");
+  });
+
+  test("TAIL-29 re-reads the terminal width on each follow redraw", async () => {
+    const clock = new ScriptedClock(NOW);
+    let remainingPolls = 1;
+    const fixture = await datedTailFixture(
+      { "2025-07-25.md": datedDocument("Initialabcdefghijklmnopqrstuvwxyz") },
+      NOW,
+      clock,
+      () => remainingPolls-- > 0,
+    );
+    fixture.io.outputIsTerminal = true;
+    fixture.io.columns = 30;
+    clock.sleepActions.push(async () => {
+      fixture.io.columns = 20;
+      await writeFile(
+        fixture.documentPath,
+        datedDocument("Updatedabcdefghijklmnopqrstuvwxyz"),
+        "utf8",
+      );
+    });
+
+    const status = await runCli(
+      "dlog",
+      ["tail", "-f", "-t", "--color=never"],
+      fixture.dependencies,
+    );
+
+    expect(status).toBe(0);
+    expect(fixture.io.output).toBe(
+      "\x1b[2J\x1b[H2025-07-25-Fri\nLog\n- 09:00 - Initialabcdefghijkl…\n" +
+        "\x1b[2J\x1b[H2025-07-25-Fri\nLog\n- 09:00 - Updatedab…\n",
+    );
+  });
+
+  test("TAIL-29b keeps an explicit --width fixed across follow redraws", async () => {
+    const clock = new ScriptedClock(NOW);
+    let remainingPolls = 1;
+    const fixture = await datedTailFixture(
+      { "2025-07-25.md": datedDocument("Initialabcdefghijklmnopqrstuvwxyz") },
+      NOW,
+      clock,
+      () => remainingPolls-- > 0,
+    );
+    fixture.io.outputIsTerminal = true;
+    fixture.io.columns = 30;
+    clock.sleepActions.push(async () => {
+      fixture.io.columns = 20;
+      await writeFile(
+        fixture.documentPath,
+        datedDocument("Updatedabcdefghijklmnopqrstuvwxyz"),
+        "utf8",
+      );
+    });
+
+    const status = await runCli(
+      "dlog",
+      ["tail", "-f", "--width", "25", "--color=never"],
+      fixture.dependencies,
+    );
+
+    expect(status).toBe(0);
+    expect(fixture.io.output).toBe(
+      "\x1b[2J\x1b[H2025-07-25-Fri\nLog\n- 09:00 - Initialabcdefg…\n" +
+        "\x1b[2J\x1b[H2025-07-25-Fri\nLog\n- 09:00 - Updatedabcdefg…\n",
+    );
+  });
+
+  test("TAIL-30 measures tabs and wide glyphs without splitting", async () => {
+    const fixture = await tailFixture(
+      "# Log\n\n- *09:00* - 日本語テスト\n- *10:00* -\tTabbed\n",
+    );
+    await runCli("dlog", ["tail", "--color=never", "--width", "20"], fixture.dependencies);
+    expect(fixture.io.output).toBe(
+      "2025-07-25-Fri\nLog\n- 09:00 - 日本語テ…\n- 10:00 -\tTab…\n",
+    );
+  });
+});
+
 describe("tail date resolution", () => {
   const cases: Array<[string, [number, number, number]]> = [
     ["-0", [2025, 6, 25]],
@@ -767,5 +1030,77 @@ describe("tail option parsing", () => {
     expect(() => parseTailOptions(["--watch"])).toThrow(
       "Unknown tail option: --watch",
     );
+  });
+
+  test("parses truncate flags and width values", () => {
+    expect(parseTailOptions(["-t"])).toEqual({
+      color: "auto",
+      follow: false,
+      previousWeekday: false,
+      truncate: true,
+    });
+    expect(parseTailOptions(["--truncate"])).toEqual({
+      color: "auto",
+      follow: false,
+      previousWeekday: false,
+      truncate: true,
+    });
+    expect(parseTailOptions(["--no-truncate"])).toEqual({
+      color: "auto",
+      follow: false,
+      previousWeekday: false,
+      truncate: false,
+    });
+    expect(parseTailOptions(["--width", "80"])).toEqual({
+      color: "auto",
+      follow: false,
+      previousWeekday: false,
+      truncate: true,
+      width: 80,
+    });
+    expect(parseTailOptions(["--width=80"])).toEqual({
+      color: "auto",
+      follow: false,
+      previousWeekday: false,
+      truncate: true,
+      width: 80,
+    });
+  });
+
+  test("resolves truncate policy by the last matching flag", () => {
+    expect(parseTailOptions(["--width", "80", "--no-truncate"])).toEqual({
+      color: "auto",
+      follow: false,
+      previousWeekday: false,
+      truncate: false,
+      width: 80,
+    });
+    expect(parseTailOptions(["--no-truncate", "-t"])).toEqual({
+      color: "auto",
+      follow: false,
+      previousWeekday: false,
+      truncate: true,
+    });
+    expect(parseTailOptions(["-t", "--no-truncate"])).toEqual({
+      color: "auto",
+      follow: false,
+      previousWeekday: false,
+      truncate: false,
+    });
+  });
+
+  test("rejects missing and invalid --width values", () => {
+    for (const arguments_ of [
+      ["--width"],
+      ["--width="],
+      ["--width", "abc"],
+      ["--width", "0"],
+      ["--width", "-5"],
+      ["--width", "10.5"],
+    ]) {
+      expect(() => parseTailOptions(arguments_)).toThrow(
+        "Option --width requires a positive integer",
+      );
+    }
   });
 });

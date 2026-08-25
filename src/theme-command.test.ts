@@ -27,6 +27,7 @@ class TestIO implements CommandIO {
   public output = "";
   public error = "";
   public outputIsTerminal = false;
+  public columns: number | undefined;
 
   public writeOutput(text: string): void {
     this.output += text;
@@ -42,6 +43,10 @@ class TestIO implements CommandIO {
 
   public isOutputTerminal(): boolean {
     return this.outputIsTerminal;
+  }
+
+  public outputColumns(): number | undefined {
+    return this.columns;
   }
 }
 

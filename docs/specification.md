@@ -158,19 +158,24 @@ The command accepts these options:
 
 | Option           | Meaning                                                         | Default |
 | ---------------- | --------------------------------------------------------------- | ------- |
-| `-w`             | Select the previous weekday; excludes DATE.                     | Off     |
-| `-f`, `--follow` | Clear before drawing and redraw when the selected file changes. | Off     |
+| `-w`             | Select the previous weekday; excludes DATE.                      | Off     |
+| `-f`, `--follow` | Clear before drawing and redraw when the selected file changes.    | Off     |
+| `-t`, `--truncate` | Truncate lines wider than the available display width.        | Off     |
+| `--no-truncate`  | Disable truncation.                                              | N/A     |
+| `--width COLUMNS` | Truncate at `COLUMNS` display columns (implies `--truncate`).   | N/A     |
 | `--color WHEN`   | `auto`, `always`, or `never`.                                   | `auto`  |
 
-`always` emits level-3 truecolor even when output is redirected or `NO_COLOR`
-is set. `never` emits no ANSI sequences. In `auto`, `FORCE_COLOR=0..3` has
-first precedence. Otherwise, a nonblank `NO_COLOR` or non-terminal standard
-output disables styling; a terminal uses detected ANSI capability from its
-environment. A theme is loaded and validated only when the resulting level is
-nonzero. Plain output consumes supported markup but emits only display text.
+`--width` and `--truncate` only apply to the displayed lines and do not alter any
+stored document bytes. `--truncate` requires a measurable display width from a
+terminal (`io.outputColumns`), the `COLUMNS` environment variable, or `--width`;
+if no width is measurable, tail exits with a hard error. `--width` values are
+positive integers and override all configuration width. The last matching truncation
+option wins in command order.
 
-Every styled output segment closes its composed styles and ends with SGR reset
-`\x1b[0m` before subsequent plain output or command completion.
+The current line width calculation treats ANSI escape sequences as not consuming
+display columns, uses tab stops, and treats wide-codepoint clusters as width `2`.
+Any truncated styled line appends `…` and then closes all composed style state
+with `ESC[0m`.
 
 #### Date argument
 

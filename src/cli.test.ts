@@ -34,9 +34,14 @@ class TestIO implements CommandIO {
   public error = "";
   public input = "";
   public outputIsTerminal = false;
+  public columns: number | undefined;
 
   public isOutputTerminal(): boolean {
     return this.outputIsTerminal;
+  }
+
+  public outputColumns(): number | undefined {
+    return this.columns;
   }
 
   public writeOutput(value: string): void {

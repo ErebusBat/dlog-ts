@@ -82,6 +82,9 @@ or a month-name form like "August 9 2026".
 Options:
   -w                           Select the previous weekday
   -f, --follow                 Clear before drawing and redraw when the document changes
+  -t, --truncate               Truncate lines wider than the output width
+      --no-truncate            Disable truncation configured in [tail]
+      --width COLUMNS          Truncate at COLUMNS display columns (implies --truncate)
       --color WHEN             Emit ANSI styling: auto, always, never (default auto)
   -h, --help                   Show this help
 `;

@@ -103,6 +103,11 @@ const ruleSchema = z.union([
   callbackRuleSchema,
 ]);
 
+const tailConfigSchema = z.strictObject({
+  truncate: z.boolean().default(false),
+  width: z.number().int().positive().optional(),
+});
+
 const primaryConfigSchema = z.strictObject({
   schema: z.literal(PRIMARY_SCHEMA),
   vault_roots: z.array(z.string().min(1)).min(1),
@@ -110,6 +115,7 @@ const primaryConfigSchema = z.strictObject({
   entry_prefix: z.string(),
   debug_output: z.string().min(1).optional(),
   theme: z.string().min(1).optional(),
+  tail: tailConfigSchema.optional(),
   includes: z.array(includeSchema).default([]),
 });
 
@@ -134,6 +140,10 @@ export interface LoadedRuleFile {
   readonly plugins: readonly ExternalPluginDefinition[];
   readonly rules: readonly ConfiguredRule[];
 }
+export interface TailDisplayConfiguration {
+  readonly truncate: boolean;
+  readonly width?: number;
+}
 
 export interface LoadedConfiguration {
   readonly sourcePath: string;
@@ -142,6 +152,7 @@ export interface LoadedConfiguration {
   readonly entryPrefixTemplate: string;
   readonly debugOutputPath?: string;
   readonly themePath?: string;
+  readonly tail: TailDisplayConfiguration;
   readonly rules: readonly ProcessingRule[];
   readonly plugins: readonly ExternalPluginDefinition[];
   readonly ruleFiles: readonly LoadedRuleFile[];
@@ -264,6 +275,12 @@ export class ConfigurationLoader {
       entryPrefixTemplate: primary.entry_prefix,
       ...(debugOutputPath === undefined ? {} : { debugOutputPath }),
       ...(themePath === undefined ? {} : { themePath }),
+      tail: {
+        truncate: primary.tail?.truncate ?? false,
+        ...(primary.tail?.width === undefined
+          ? {}
+          : { width: primary.tail.width }),
+      },
       rules,
       plugins,
       ruleFiles,

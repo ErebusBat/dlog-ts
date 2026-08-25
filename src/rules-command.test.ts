@@ -246,12 +246,16 @@ TOTAL rules (0)
 `);
   });
 
-  test("RULES-06 detailed print gives inputs and outputs distinct backgrounds", async () => {
+  test("RULES-06 detailed print uses black text on distinct input and output backgrounds", async () => {
     const fixture = await rulesFixture();
 
     expect(await run(fixture, ["print", "--rules", "--color=always"])).toBe(0);
-    expect(fixture.io.output).toContain("\u001b[44m+1\u001b[49m");
-    expect(fixture.io.output).toContain("\u001b[45m👍\u001b[49m");
+    expect(fixture.io.output).toContain(
+      "\u001b[44m\u001b[30m+1\u001b[39m\u001b[49m",
+    );
+    expect(fixture.io.output).toContain(
+      "\u001b[45m\u001b[30m👍\u001b[39m\u001b[49m",
+    );
     expect(Bun.stripANSI(fixture.io.output)).toContain("\n AI  =>  🤖 \n");
   });
 

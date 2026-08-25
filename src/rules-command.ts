@@ -453,10 +453,10 @@ class RuleValueStyler {
   }
 
   public input(value: string): string {
-    return this.#formatter?.bgBlue(value) ?? value;
+    return this.#formatter?.bgBlue.black(value) ?? value;
   }
 
   public output(value: string): string {
-    return this.#formatter?.bgMagenta(value) ?? value;
+    return this.#formatter?.bgMagenta.black(value) ?? value;
   }
 }

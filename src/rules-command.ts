@@ -306,7 +306,7 @@ function renderRuleFile(
   styler: RuleValueStyler,
   environment: Readonly<NodeJS.ProcessEnv>,
 ): string {
-  const sections = [displayPath(file.sourcePath, environment)];
+  const sections: string[] = [];
   if (file.plugins.length > 0) {
     const pluginSection = [`PLUGIN (${file.plugins.length})`];
     if (includeRules) {
@@ -322,8 +322,13 @@ function renderRuleFile(
   } else {
     appendRuleCounts(sections, file.rules);
   }
-  sections.push(`TOTAL rules (${file.rules.length})`);
-  return sections.join("\n\n");
+
+  const lines = [`┌─ ${displayPath(file.sourcePath, environment)}`, "│"];
+  for (const section of sections) {
+    lines.push(...section.split("\n").map((line) => `│  ${line}`), "│");
+  }
+  lines.push(`└─ TOTAL rules (${file.rules.length})`);
+  return lines.join("\n");
 }
 
 function appendRuleCounts(

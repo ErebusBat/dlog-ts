@@ -50,16 +50,16 @@ These cases verify configuration semantics. The configuration format and how a d
 
 ## Rules inspection scenarios
 
-| ID       | Invocation / setup                                                                                 | Expected result                                                                                                                               |
-| -------- | -------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| RULES-01 | `dlog rules`                                                                                       | List `prefix`, `global`, `callback`, and `link` with short descriptions without loading configuration.                                        |
-| RULES-02 | `dlog rules info KIND` for each supported kind.                                                    | Show detailed semantics, valid TOML configuration, and sample append input/output for that kind.                                              |
-| RULES-03 | `dlog rules plugin` with one enabled plugin.                                                       | Show its tilde-abbreviated source file, protocol, name, expanded command, and arguments in registration order.                                |
-| RULES-04 | `dlog rules print` with active and disabled files, rules, and plugins.                             | Show files in effective order, separate sections with blank lines, show nonzero counts by kind, and include `TOTAL rules (N)` for every file. |
-| RULES-05 | `dlog rules print --rules` with prefix, global, then prefix definitions and unequal input lengths. | Preserve section order, separate sections with blank lines, and align `=>` to the widest input within each section.                           |
-| RULES-06 | `dlog rules print --rules --color=always` with values containing edge whitespace.                  | Surround values with red backticks and render their exact bytes as white text on a black background.                                          |
-| RULES-07 | An unknown rule kind, nested command, or print option.                                             | Reject it with a specific usage error and nonzero status.                                                                                     |
-| RULES-08 | Invoke through `dlog-rules`.                                                                       | Do not infer the `rules` command from argv0.                                                                                                  |
+| ID       | Invocation / setup                                                                                 | Expected result                                                                                                       |
+| -------- | -------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| RULES-01 | `dlog rules`                                                                                       | List `prefix`, `global`, `callback`, and `link` with short descriptions without loading configuration.                |
+| RULES-02 | `dlog rules info KIND` for each supported kind.                                                    | Show detailed semantics, valid TOML configuration, and sample append input/output for that kind.                      |
+| RULES-03 | `dlog rules plugin` with one enabled plugin.                                                       | Show its tilde-abbreviated source file, protocol, name, expanded command, and arguments in registration order.        |
+| RULES-04 | `dlog rules print` with active and disabled files, rules, and plugins.                             | Frame every file with `┌─`, `│`, and `└─`; preserve effective order; separate sections; and include every file total. |
+| RULES-05 | `dlog rules print --rules` with prefix, global, then prefix definitions and unequal input lengths. | Preserve section order, separate sections with blank connector lines, and align `=>` within each section.             |
+| RULES-06 | `dlog rules print --rules --color=always` with values containing edge whitespace.                  | Surround values with red backticks and render their exact bytes as white text on a black background.                  |
+| RULES-07 | An unknown rule kind, nested command, or print option.                                             | Reject it with a specific usage error and nonzero status.                                                             |
+| RULES-08 | Invoke through `dlog-rules`.                                                                       | Do not infer the `rules` command from argv0.                                                                          |
 
 ## Entry-processing scenarios
 

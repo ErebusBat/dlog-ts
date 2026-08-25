@@ -281,12 +281,12 @@ plugin in registration order. Plugins are grouped under the rule file that
 declares them and show their protocol, name, expanded command, and arguments.
 
 `dlog rules print` loads configuration and prints every parsed rule file in
-effective application order. Each file shows its abbreviated path, plugin
-count when nonzero, nonzero rule counts by kind, and an unconditional
-`TOTAL rules (N)` subtotal. A blank line separates the path, plugin section,
-each rule-kind section, and total. Disabled rules and plugins are omitted; a
-disabled file remains visible with total zero. Absolute paths under the user's
-home directory begin with `~`.
+effective application order. A Unicode box-drawing frame groups each file:
+`┌─` introduces its abbreviated path, `│` connects its plugin and rule-kind
+sections, and `└─` introduces the unconditional `TOTAL rules (N)` subtotal.
+Blank connector lines separate sections. Disabled rules and plugins are
+omitted; a disabled file remains visible with total zero. Absolute paths under
+the user's home directory begin with `~`.
 
 `dlog rules print --rules` additionally prints every active plugin and rule.
 Rule sections follow configuration order and may repeat when kinds alternate;

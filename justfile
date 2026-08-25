@@ -123,6 +123,57 @@ clean:
     rm -rf {{ BUN_OUT }}
 
 ############################################################
+### Installation
+############################################################
+INSTALL_DIR := env('HOME') / 'bin'
+INSTALL_PATH := INSTALL_DIR / 'dlog'
+OS_COMPILE_PATH := BUN_OUT / BUN_OS + '-' + BUN_CPU / CLI_BASENAME
+
+[doc('Make and install compiled binary and symlinks to sub-commands')]
+[group('Install')]
+install: compile install-binary install-links
+
+[doc('Install compiled binary')]
+[group('Install')]
+install-binary bin=INSTALL_PATH:
+    cp -v {{ OS_COMPILE_PATH }} {{ bin }}
+    @printf "✅ Copied application binary\n"
+
+#-----------------------------------------------------------
+### Links
+#-----------------------------------------------------------
+[doc('Install / create symlinks pointing to dlog bin at given path')]
+[group('Install')]
+install-links bin=INSTALL_PATH to_dir=INSTALL_DIR:
+    #!/usr/bin/env zsh
+    function linkit() {
+        local link_name="$1"
+        local to_path="{{ to_dir}}/$link_name"
+        local bin="{{bin}}"
+        if [[ -s $to_path ]]; then
+            printf "☑ Skipping $link_name Symlink\n"
+        else
+            printf "✅ Creating $link_name Symlink\n"
+            ln -s ${bin} ${to_path}
+        fi
+    }
+    linkit 'dlog-append'
+    linkit 'dlog-fixup'
+    linkit 'dlog-tail'
+
+[group('Install')]
+[doc('Remove symlinks from given dir')]
+uninstall-links dir=INSTALL_DIR:
+    rm -v {{ dir / 'dlog-append' }} || true
+    rm -v {{ dir / 'dlog-fixup' }} || true
+    rm -v {{ dir / 'dlog-tail' }} || true
+
+#-----------------------------------------------------------
+### Binary Installation
+#-----------------------------------------------------------
+
+
+############################################################
 ### project targets
 ############################################################
 alias r := run

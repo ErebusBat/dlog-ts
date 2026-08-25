@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import type { CommandIO } from "./append-command.js";
 import { runCli, type CliDependencies } from "./cli.js";
@@ -71,6 +71,29 @@ class FixedClock implements WatchClock {
   public async sleep(_seconds: number): Promise<void> {}
 }
 
+class ScriptedClock implements WatchClock {
+  public wallTime: Date;
+  public readonly sleeps: number[] = [];
+  public readonly sleepActions: Array<() => void | Promise<void>> = [];
+
+  public constructor(wallTime: Date) {
+    this.wallTime = new Date(wallTime);
+  }
+
+  public now(): Date {
+    return new Date(this.wallTime);
+  }
+
+  public monotonicSeconds(): number {
+    return this.sleeps.reduce((total, seconds) => total + seconds, 0);
+  }
+
+  public async sleep(seconds: number): Promise<void> {
+    this.sleeps.push(seconds);
+    await this.sleepActions.shift()?.();
+  }
+}
+
 class RecordingLogger implements OperationalLogger {
   public readonly messages: string[] = [];
 
@@ -89,6 +112,8 @@ interface TailFixture {
 async function datedTailFixture(
   documents: Record<string, string>,
   now: Date = NOW,
+  clock: WatchClock = new FixedClock(now),
+  keepWatching: () => boolean = () => false,
 ): Promise<TailFixture> {
   const root = await mkdtemp(join(tmpdir(), "dlog-tail-"));
   temporaryDirectories.push(root);
@@ -135,13 +160,14 @@ entry_prefix = "- *%H:%M* - "
       themeLoader,
       documentReader: new DailyDocumentReader(),
       documentWriter: new DailyDocumentWriter(),
-      clock: new FixedClock(now),
+      clock,
       hasher: new Sha256FileHasher(),
       logger: new RecordingLogger(),
       watchdogScheduler: new SystemWatchdogScheduler(),
       fatalExit: (status) => {
         throw new Error(`Unexpected fatal exit ${status}`);
       },
+      keepWatching,
       cwd: root,
       environment,
     },
@@ -204,6 +230,7 @@ entry_prefix = "- *%H:%M* - "
       fatalExit: (status) => {
         throw new Error(`Unexpected fatal exit ${status}`);
       },
+      keepWatching: () => false,
       cwd: root,
       environment,
     },
@@ -412,6 +439,77 @@ describe("tail CLI conformance", () => {
   });
 });
 
+describe("tail follow conformance", () => {
+  test("TAIL-22 clears before drawing and redraws after a change", async () => {
+    const clock = new ScriptedClock(NOW);
+    let remainingPolls = 1;
+    const fixture = await datedTailFixture(
+      { "2025-07-25.md": datedDocument("Initial") },
+      NOW,
+      clock,
+      () => remainingPolls-- > 0,
+    );
+    clock.sleepActions.push(async () => {
+      await writeFile(fixture.documentPath, datedDocument("Updated"), "utf8");
+    });
+
+    const status = await runCli(
+      "dlog",
+      ["tail", "-f", "--color=never"],
+      fixture.dependencies,
+    );
+
+    expect(status).toBe(0);
+    expect(clock.sleeps).toEqual([1]);
+    expect(fixture.io.output).toBe(
+      "\x1b[2J\x1b[H2025-07-25-Fri\nLog\n- 09:00 - Initial\n" +
+        "\x1b[2J\x1b[H2025-07-25-Fri\nLog\n- 09:00 - Updated\n",
+    );
+    expect(fixture.io.error).toBe("");
+  });
+
+  test("TAIL-23 keeps the previous display until the new day's file exists", async () => {
+    const clock = new ScriptedClock(new Date(2025, 6, 25, 23, 59, 59));
+    let remainingPolls = 2;
+    const fixture = await datedTailFixture(
+      { "2025-07-25.md": datedDocument("Friday") },
+      clock.now(),
+      clock,
+      () => remainingPolls-- > 0,
+    );
+    let outputWhileSaturdayIsMissing = "";
+    clock.sleepActions.push(
+      () => {
+        clock.wallTime = new Date(2025, 6, 26, 0, 0, 0);
+      },
+      async () => {
+        outputWhileSaturdayIsMissing = fixture.io.output;
+        await writeFile(
+          join(dirname(fixture.documentPath), "2025-07-26.md"),
+          datedDocument("Saturday"),
+          "utf8",
+        );
+      },
+    );
+
+    const status = await runCli(
+      "dlog",
+      ["tail", "--follow", "--color=never"],
+      fixture.dependencies,
+    );
+
+    const fridayDisplay =
+      "\x1b[2J\x1b[H2025-07-25-Fri\nLog\n- 09:00 - Friday\n";
+    expect(status).toBe(0);
+    expect(clock.sleeps).toEqual([1, 1]);
+    expect(outputWhileSaturdayIsMissing).toBe(fridayDisplay);
+    expect(fixture.io.output).toBe(
+      `${fridayDisplay}\x1b[2J\x1b[H2025-07-26-Sat\nLog\n- 09:00 - Saturday\n`,
+    );
+    expect(fixture.io.error).toBe("");
+  });
+});
+
 describe("tail date resolution", () => {
   const cases: Array<[string, [number, number, number]]> = [
     ["-0", [2025, 6, 25]],
@@ -588,17 +686,30 @@ describe("tail date CLI conformance", () => {
 });
 
 describe("tail option parsing", () => {
-  test("parses separated and inline --color values", () => {
+  test("parses follow shorthand, long form, and color values", () => {
     expect(parseTailOptions([])).toEqual({
       color: "auto",
+      follow: false,
+      previousWeekday: false,
+    });
+    expect(parseTailOptions(["-f"])).toEqual({
+      color: "auto",
+      follow: true,
+      previousWeekday: false,
+    });
+    expect(parseTailOptions(["--follow"])).toEqual({
+      color: "auto",
+      follow: true,
       previousWeekday: false,
     });
     expect(parseTailOptions(["--color", "never"])).toEqual({
       color: "never",
+      follow: false,
       previousWeekday: false,
     });
     expect(parseTailOptions(["--color=always"])).toEqual({
       color: "always",
+      follow: false,
       previousWeekday: false,
     });
   });
@@ -611,16 +722,19 @@ describe("tail option parsing", () => {
   test("accepts a positional date alongside options", () => {
     expect(parseTailOptions(["-1"])).toEqual({
       color: "auto",
+      follow: false,
       previousWeekday: false,
       date: "-1",
     });
     expect(parseTailOptions(["--color=never", "mon"])).toEqual({
       color: "never",
+      follow: false,
       previousWeekday: false,
       date: "mon",
     });
     expect(parseTailOptions(["--", "-1"])).toEqual({
       color: "auto",
+      follow: false,
       previousWeekday: false,
       date: "-1",
     });
@@ -629,6 +743,7 @@ describe("tail option parsing", () => {
   test("parses -w and rejects combining it with a date", () => {
     expect(parseTailOptions(["-w"])).toEqual({
       color: "auto",
+      follow: false,
       previousWeekday: true,
     });
     expect(() => parseTailOptions(["-w", "-1"])).toThrow(
@@ -645,6 +760,9 @@ describe("tail option parsing", () => {
   test("rejects an invalid color value and unknown options", () => {
     expect(() => parseTailOptions(["--color", "sometimes"])).toThrow(
       "--color requires one of: auto, always, never",
+    );
+    expect(() => parseTailOptions(["--sometimes"])).toThrow(
+      "Unknown tail option: --sometimes",
     );
     expect(() => parseTailOptions(["--watch"])).toThrow(
       "Unknown tail option: --watch",

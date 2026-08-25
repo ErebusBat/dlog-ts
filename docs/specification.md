@@ -103,12 +103,17 @@ Use a monotonic clock for polling, throttling, and watchdog timers. Operational 
 
 ### Tail command
 
-The tail command is a read-only, one-shot display command. It locates and loads configuration, resolves the selected day's daily document, extracts the `# Log` section, and writes a formatted rendering to standard output. It never modifies the document. Unlike `tail -f`, it has no follow mode; the fixup command owns watching.
+The tail command is a read-only display command. It locates and loads
+configuration, resolves the selected day's daily document, extracts the
+`# Log` section, and writes a formatted rendering to standard output. It never
+modifies the document.
 
 1. Locate and load configuration as described in [Configuration discovery](#configuration-discovery) and resolve the selected day's daily document. With no date argument or `-w` option, the selected day is today. With `-w`, select the previous weekday: Friday from Saturday, Sunday, or Monday; otherwise, the preceding calendar day.
-2. Extract the section using the same rules as the writer's [Section selection](#section-selection): the first line whose trimmed value is exactly `# Log`, the range up to the next heading or end of file, every line trimmed, blank lines discarded. A missing `# Log` header or a missing document is an error, exactly as for append.
+2. Extract the section using the same rules as the writer's [Section selection](#section-selection): the first line whose trimmed value is exactly `# Log`, the range up to the next heading or end of file, every line trimmed, blank lines discarded. A missing `# Log` header or a missing initial document is an error, exactly as for append.
 3. Write the selected date as `YYYY-MM-DD-Day`, where `Day` is the three-letter English weekday name. Write the rendered heading line next, then one rendered line per extracted section line, in document order. Every written line, including the last, ends with a newline.
-4. Exit with status `0`.
+4. Without `-f` or `--follow`, exit with status `0` after the initial rendering.
+5. With `-f` or `--follow`, clear the terminal with `ESC[2JESC[H` before the initial rendering, then poll the complete selected file every second. When its bytes change, clear the terminal again and redraw the complete rendering. Continue until interrupted.
+6. A followed default-today selection follows the local calendar day. After midnight, resolve the new day's path on every poll. If that document does not yet exist, emit no output or error and retain the previous display. Switch and redraw only after the new document exists. Explicit date arguments and `-w` remain fixed to the day selected at startup.
 
 Tail displays everything in the section. It does not apply the writer's standard-entry filter, sort, split, or duplicate removal; those are write-time normalizations, not display rules.
 
@@ -144,10 +149,11 @@ an inline foreground or background replaces the message color.
 
 The command accepts these options:
 
-| Option         | Meaning                                     | Default |
-| -------------- | ------------------------------------------- | ------- |
-| `-w`           | Select the previous weekday; excludes DATE. | Off     |
-| `--color WHEN` | `auto`, `always`, or `never`.               | `auto`  |
+| Option           | Meaning                                                         | Default |
+| ---------------- | --------------------------------------------------------------- | ------- |
+| `-w`             | Select the previous weekday; excludes DATE.                     | Off     |
+| `-f`, `--follow` | Clear before drawing and redraw when the selected file changes. | Off     |
+| `--color WHEN`   | `auto`, `always`, or `never`.                                   | `auto`  |
 
 `always` emits level-3 truecolor even when output is redirected or `NO_COLOR`
 is set. `never` emits no ANSI sequences. In `auto`, `FORCE_COLOR=0..3` has

@@ -72,6 +72,7 @@ or a month-name form like "August 9 2026".
 
 Options:
   -w                           Select the previous weekday
+  -f, --follow                 Clear before drawing and redraw when the document changes
       --color WHEN             Emit ANSI styling: auto, always, never (default auto)
   -h, --help                   Show this help
 `;
@@ -101,6 +102,7 @@ export interface CliDependencies {
   readonly logger: OperationalLogger;
   readonly watchdogScheduler: WatchdogScheduler;
   readonly fatalExit: (status: number) => void;
+  readonly keepWatching: () => boolean;
   readonly cwd: string;
   readonly environment: Readonly<NodeJS.ProcessEnv>;
 }
@@ -177,6 +179,7 @@ export function createDefaultCliDependencies(): CliDependencies {
     fatalExit: (status) => {
       process.exit(status);
     },
+    keepWatching: () => true,
     cwd: configurationEnvironment.cwd,
     environment: configurationEnvironment.variables,
   };
@@ -218,7 +221,7 @@ async function runFixup(
     logger: dependencies.logger,
     watchdogScheduler: dependencies.watchdogScheduler,
     fatalExit: dependencies.fatalExit,
-    keepWatching: () => true,
+    keepWatching: dependencies.keepWatching,
   }).run();
 }
 
@@ -235,9 +238,11 @@ async function runTail(
     configurationLoader: dependencies.configurationLoader,
     documentReader: dependencies.documentReader,
     io: dependencies.io,
-    now: () => dependencies.clock.now(),
+    clock: dependencies.clock,
     environment: dependencies.environment,
     themeLoader: dependencies.themeLoader,
+    hasher: dependencies.hasher,
+    keepWatching: dependencies.keepWatching,
   };
   return new TailCommand(commandDependencies).run(parsed);
 }

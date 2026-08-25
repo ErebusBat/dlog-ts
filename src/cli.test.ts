@@ -136,6 +136,7 @@ ${include}`,
       fatalExit: (status) => {
         throw new Error(`Unexpected fatal exit ${status}`);
       },
+      keepWatching: () => false,
       cwd: root,
       environment: configEnvironment.variables,
     },

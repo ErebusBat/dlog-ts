@@ -39,6 +39,7 @@ dlog append                 # prompts for one line
 dlog fixup                  # normalize once
 dlog fixup --watch          # continue watching
 dlog tail                   # print today's date and formatted # Log section
+dlog tail -f                # clear and redraw while following today's log
 dlog tail --color=never     # plain log formatting for piping
 dlog tail -w                # previous weekday (Monday selects Friday)
 dlog tail -1                # yesterday's section
@@ -73,6 +74,18 @@ Fixup options:
     --cache-config
     --no-cache-config
 ```
+
+Tail options:
+
+```text
+-w
+-f, --follow
+    --color auto|always|never
+```
+
+With `--follow`, a default-today tail follows the local date across midnight.
+If the new daily document does not exist yet, the previous log remains visible
+until the new document appears.
 
 ## Application configuration
 

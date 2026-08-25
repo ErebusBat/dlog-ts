@@ -5,6 +5,7 @@ import {
 } from "./configuration.js";
 import type { DailyDocumentReader } from "./daily-document.js";
 import { DlogError } from "./dlog-error.js";
+import type { FileHasher, WatchClock } from "./fixup-watcher.js";
 import {
   resolveColorLevel,
   ThemeStyler,
@@ -14,8 +15,12 @@ import {
 
 export type TailColorMode = ColorMode;
 
+const CLEAR_SCREEN = "\x1b[2J\x1b[H";
+const WATCH_POLL_INTERVAL_SECONDS = 1;
+
 export interface TailOptions {
   readonly color: TailColorMode;
+  readonly follow: boolean;
   readonly previousWeekday: boolean;
   readonly date?: string;
 }
@@ -24,9 +29,11 @@ export interface TailCommandDependencies {
   readonly configurationLoader: ConfigurationLoader;
   readonly documentReader: DailyDocumentReader;
   readonly io: CommandIO;
-  readonly now: () => Date;
+  readonly clock: Pick<WatchClock, "now" | "sleep">;
   readonly environment: Readonly<NodeJS.ProcessEnv>;
   readonly themeLoader: Pick<ThemeProvider, "loadForConfiguration">;
+  readonly hasher: FileHasher;
+  readonly keepWatching: () => boolean;
 }
 
 const LINK_PATTERN =
@@ -41,10 +48,10 @@ export class TailCommand {
 
   public async run(options: TailOptions): Promise<number> {
     const configuration = await this.#dependencies.configurationLoader.load();
-    const now = this.#dependencies.now();
-    const day = selectTailDate(options, now);
-    const path = dailyDocumentPath(configuration, day);
-    const lines = await this.#dependencies.documentReader.readLogSection(path);
+    const initialDay = selectTailDate(options, this.#dependencies.clock.now());
+    const initialPath = dailyDocumentPath(configuration, initialDay);
+    const initialLines =
+      await this.#dependencies.documentReader.readLogSection(initialPath);
     const colorLevel = resolveColorLevel(
       options.color,
       this.#dependencies.io.isOutputTerminal(),
@@ -62,15 +69,80 @@ export class TailCommand {
             colorLevel,
           );
     this.#dependencies.io.writeOutput(
-      renderDailyLog(formatTailDate(day), lines, styler),
+      `${options.follow ? CLEAR_SCREEN : ""}${renderDailyLog(
+        formatTailDate(initialDay),
+        initialLines,
+        styler,
+      )}`,
     );
+    if (!options.follow) {
+      return 0;
+    }
+
+    let displayedDay = initialDay;
+    let displayedPath = initialPath;
+    let displayedHash = await this.#hashIfPresent(displayedPath);
+    const followsCurrentDay =
+      options.date === undefined && !options.previousWeekday;
+
+    while (this.#dependencies.keepWatching()) {
+      await this.#dependencies.clock.sleep(WATCH_POLL_INTERVAL_SECONDS);
+      const candidateDay = followsCurrentDay
+        ? this.#dependencies.clock.now()
+        : displayedDay;
+      const candidatePath = dailyDocumentPath(configuration, candidateDay);
+      const candidateHash = await this.#hashIfPresent(candidatePath);
+      if (
+        candidateHash === undefined ||
+        (candidatePath === displayedPath &&
+          candidateHash === displayedHash &&
+          formatTailDate(candidateDay) === formatTailDate(displayedDay))
+      ) {
+        continue;
+      }
+
+      let candidateLines: readonly string[];
+      try {
+        candidateLines =
+          await this.#dependencies.documentReader.readLogSection(candidatePath);
+      } catch (error) {
+        if (isMissingFileError(error)) {
+          continue;
+        }
+        throw error;
+      }
+
+      this.#dependencies.io.writeOutput(
+        `${CLEAR_SCREEN}${renderDailyLog(
+          formatTailDate(candidateDay),
+          candidateLines,
+          styler,
+        )}`,
+      );
+      displayedDay = candidateDay;
+      displayedPath = candidatePath;
+      displayedHash = candidateHash;
+    }
+
     return 0;
+  }
+
+  async #hashIfPresent(path: string): Promise<string | undefined> {
+    try {
+      return await this.#dependencies.hasher.hash(path);
+    } catch (error) {
+      if (isMissingFileError(error)) {
+        return undefined;
+      }
+      throw error;
+    }
   }
 }
 
 export function parseTailOptions(
   arguments_: readonly string[],
 ): TailOptions | "help" {
+  let follow = false;
   let color: TailColorMode = "auto";
   let previousWeekday = false;
   let date: string | undefined;
@@ -92,6 +164,10 @@ export function parseTailOptions(
       }
       if (argument === "-w") {
         previousWeekday = true;
+        continue;
+      }
+      if (argument === "-f" || argument === "--follow") {
+        follow = true;
         continue;
       }
 
@@ -128,7 +204,7 @@ export function parseTailOptions(
     throw new DlogError("Option -w cannot be combined with a date argument");
   }
 
-  const options = { color, previousWeekday };
+  const options = { color, follow, previousWeekday };
   return date === undefined ? options : { ...options, date };
 }
 
@@ -141,6 +217,16 @@ const WEEKDAY_ABBREVIATIONS = [
   "Fri",
   "Sat",
 ] as const;
+
+function isMissingFileError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  if ("code" in error && error.code === "ENOENT") {
+    return true;
+  }
+  return isMissingFileError(error.cause);
+}
 
 function selectTailDate(options: TailOptions, now: Date): Date {
   if (options.previousWeekday) {

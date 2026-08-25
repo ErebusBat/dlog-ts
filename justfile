@@ -79,14 +79,14 @@ BUN_CMD := 'mise x -- bun'
 BUN_CPU := if arch() == "aarch64" { "arm64" } else if arch() == "x86_64" { "x64" } else { arch() }
 BUN_OS := if os() == "macos" { "darwin" } else { os() }
 
-[doc('Install dependencies')]
+[doc('Install development dependencies')]
 [group('Compile')]
-install os=BUN_OS cpu=BUN_CPU:
-    {{ BUN_CMD }} install --os {{ os }} --cpu {{ cpu }}
+install-deps os=BUN_OS cpu=BUN_CPU:
+    {{ BUN_CMD }} install-deps --os {{ os }} --cpu {{ cpu }}
 
-[doc('Install deps and compile native binary for this platform')]
+[doc('Install development dependencies and compile native binary for this platform')]
 [group('Compile')]
-build: install
+build: install-deps
     just compile
 
 [doc('Compile one native binary with argv0 command aliases')]
@@ -101,11 +101,11 @@ compile os=BUN_OS cpu=BUN_CPU:
 #-----------------------------------------------------------
 ### Cross Compilation
 #-----------------------------------------------------------
-[doc('All deps for all platforms')]
+[doc('Install development dependencies for all platforms')]
 [group('X-Compile')]
-install-all:
-    just install linux x64
-    just install darwin arm64
+install-deps-all:
+    just install-deps linux x64
+    just install-deps darwin arm64
 
 [doc('Compile for all supported platforms')]
 [group('X-Compile')]
@@ -113,9 +113,9 @@ compile-all:
     just compile linux x64
     just compile darwin arm64
 
-[doc('Install and Compile for all supported platforms')]
+[doc('Install development dependencies and Compile for all supported platforms')]
 [group('X-Compile')]
-build-all: install-all compile-all
+build-all: install-deps-all compile-all
 
 [doc('Remove generated build output')]
 [group('Compile')]

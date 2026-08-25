@@ -362,14 +362,24 @@ function appendDetailedRules(
     while (rules[end]?.kind === first.kind) {
       end += 1;
     }
+    let inputWidth = 0;
+    for (let ruleIndex = index; ruleIndex < end; ruleIndex += 1) {
+      const rule = rules[ruleIndex];
+      if (rule === undefined) {
+        throw new DlogError("Rule width calculation lost a grouped rule");
+      }
+      inputWidth = Math.max(inputWidth, ruleInput(rule).length);
+    }
     lines.push(ruleSectionHeading(first.kind, end - index));
     for (let ruleIndex = index; ruleIndex < end; ruleIndex += 1) {
       const rule = rules[ruleIndex];
       if (rule === undefined) {
         throw new DlogError("Rule detail rendering lost a grouped rule");
       }
+      const input = ruleInput(rule);
+      const padding = " ".repeat(inputWidth - input.length);
       lines.push(
-        `${styler.input(ruleInput(rule))} => ${styler.output(ruleOutput(rule))}`,
+        `${styler.input(input)}${padding} => ${styler.output(ruleOutput(rule))}`,
       );
     }
     index = end;

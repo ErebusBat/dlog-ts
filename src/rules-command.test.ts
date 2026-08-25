@@ -84,6 +84,11 @@ match = " AI "
 replace = " 🤖 "
 
 [[rules]]
+kind = "global"
+match = ":check:"
+replace = "✅"
+
+[[rules]]
 kind = "prefix"
 match = "TODO"
 replace = "✅"
@@ -206,8 +211,8 @@ json - MyPlugin
     expect(fixture.io.output).toBe(`~/rules/000-first.toml
 PLUGIN (1)
 PREFIX rules (2)
-GLOBAL rules (1)
-TOTAL rules (3)
+GLOBAL rules (2)
+TOTAL rules (4)
 
 ~/rules/010-more.toml
 LINK rules (1)
@@ -228,11 +233,12 @@ PLUGIN (1)
 json - MyPlugin
 PREFIX rules (1)
 +1 => 👍
-GLOBAL rules (1)
- AI  =>  🤖 
+GLOBAL rules (2)
+ AI     =>  🤖 
+:check: => ✅
 PREFIX rules (1)
 TODO => ✅
-TOTAL rules (3)
+TOTAL rules (4)
 
 ~/rules/010-more.toml
 LINK rules (1)
@@ -256,7 +262,7 @@ TOTAL rules (0)
     expect(fixture.io.output).toContain(
       "\u001b[45m\u001b[30m👍\u001b[39m\u001b[49m",
     );
-    expect(Bun.stripANSI(fixture.io.output)).toContain("\n AI  =>  🤖 \n");
+    expect(Bun.stripANSI(fixture.io.output)).toContain("\n AI     =>  🤖 \n");
   });
 
   test("RULES-07 rejects unknown rule types and print options", () => {

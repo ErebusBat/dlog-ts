@@ -290,7 +290,8 @@ directory begin with `~`.
 `dlog rules print --rules` additionally prints every active plugin and rule.
 Rule sections follow configuration order and may repeat when kinds alternate;
 they are not regrouped in a way that changes the apparent application order.
-Rule input and output values use distinct background colors with black
+Within each section, the `=>` separators align to the widest input in that
+section. Rule input and output values use distinct background colors with black
 foreground text so leading and trailing whitespace remains visible without
 sacrificing contrast. `--color auto|always|never` follows the tail command's
 color policy and defaults to `auto`.

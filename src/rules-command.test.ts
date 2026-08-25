@@ -209,60 +209,78 @@ json - MyPlugin
 
     expect(await run(fixture, ["print"])).toBe(0);
     expect(fixture.io.output).toBe(`~/rules/000-first.toml
+
 PLUGIN (1)
+
 PREFIX rules (2)
+
 GLOBAL rules (2)
+
 TOTAL rules (4)
 
 ~/rules/010-more.toml
+
 LINK rules (1)
+
 CALLBACK rules (1)
+
 TOTAL rules (2)
 
 ~/rules/020-disabled.toml
+
 TOTAL rules (0)
 `);
   });
 
-  test("RULES-05 detailed print preserves alternating rule order", async () => {
+  test("RULES-05 detailed print separates sections and preserves alternating rule order", async () => {
     const fixture = await rulesFixture();
 
     expect(await run(fixture, ["print", "--rules", "--color=never"])).toBe(0);
     expect(fixture.io.output).toBe(`~/rules/000-first.toml
+
 PLUGIN (1)
 json - MyPlugin
+
 PREFIX rules (1)
-+1 => 👍
+\`+1\` => \`👍\`
+
 GLOBAL rules (2)
- AI     =>  🤖 
-:check: => ✅
+\` AI \`    => \` 🤖 \`
+\`:check:\` => \`✅\`
+
 PREFIX rules (1)
-TODO => ✅
+\`TODO\` => \`✅\`
+
 TOTAL rules (4)
 
 ~/rules/010-more.toml
+
 LINK rules (1)
-Lucy => [[People/Lucy|Lucy]]
+\`Lucy\` => \`[[People/Lucy|Lucy]]\`
+
 CALLBACK rules (1)
-/ISSUE-[0-9]+/i => plugin:MyPlugin
+\`/ISSUE-[0-9]+/i\` => \`plugin:MyPlugin\`
+
 TOTAL rules (2)
 
 ~/rules/020-disabled.toml
+
 TOTAL rules (0)
 `);
   });
 
-  test("RULES-06 detailed print uses black text on distinct input and output backgrounds", async () => {
+  test("RULES-06 detailed print uses white-on-black values with red backticks", async () => {
     const fixture = await rulesFixture();
 
     expect(await run(fixture, ["print", "--rules", "--color=always"])).toBe(0);
-    expect(fixture.io.output).toContain(
-      "\u001b[44m\u001b[30m+1\u001b[39m\u001b[49m",
+    const styledInput =
+      "\u001b[31m`\u001b[39m\u001b[40m\u001b[37m+1\u001b[39m\u001b[49m\u001b[31m`\u001b[39m";
+    const styledOutput =
+      "\u001b[31m`\u001b[39m\u001b[40m\u001b[37m👍\u001b[39m\u001b[49m\u001b[31m`\u001b[39m";
+    expect(fixture.io.output).toContain(`${styledInput} => ${styledOutput}`);
+    expect(Bun.stripANSI(fixture.io.output)).toContain(
+      "\n\` AI \`    => \` 🤖 \`\n",
     );
-    expect(fixture.io.output).toContain(
-      "\u001b[45m\u001b[30m👍\u001b[39m\u001b[49m",
-    );
-    expect(Bun.stripANSI(fixture.io.output)).toContain("\n AI     =>  🤖 \n");
   });
 
   test("RULES-07 rejects unknown rule types and print options", () => {

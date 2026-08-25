@@ -306,23 +306,24 @@ function renderRuleFile(
   styler: RuleValueStyler,
   environment: Readonly<NodeJS.ProcessEnv>,
 ): string {
-  const lines = [displayPath(file.sourcePath, environment)];
+  const sections = [displayPath(file.sourcePath, environment)];
   if (file.plugins.length > 0) {
-    lines.push(`PLUGIN (${file.plugins.length})`);
+    const pluginSection = [`PLUGIN (${file.plugins.length})`];
     if (includeRules) {
       for (const plugin of file.plugins) {
-        lines.push(`${plugin.protocol} - ${plugin.name}`);
+        pluginSection.push(`${plugin.protocol} - ${plugin.name}`);
       }
     }
+    sections.push(pluginSection.join("\n"));
   }
 
   if (includeRules) {
-    appendDetailedRules(lines, file.rules, styler);
+    appendDetailedRules(sections, file.rules, styler);
   } else {
-    appendRuleCounts(lines, file.rules);
+    appendRuleCounts(sections, file.rules);
   }
-  lines.push(`TOTAL rules (${file.rules.length})`);
-  return lines.join("\n");
+  sections.push(`TOTAL rules (${file.rules.length})`);
+  return sections.join("\n\n");
 }
 
 function appendRuleCounts(
@@ -370,7 +371,7 @@ function appendDetailedRules(
       }
       inputWidth = Math.max(inputWidth, ruleInput(rule).length);
     }
-    lines.push(ruleSectionHeading(first.kind, end - index));
+    const sectionLines = [ruleSectionHeading(first.kind, end - index)];
     for (let ruleIndex = index; ruleIndex < end; ruleIndex += 1) {
       const rule = rules[ruleIndex];
       if (rule === undefined) {
@@ -378,10 +379,11 @@ function appendDetailedRules(
       }
       const input = ruleInput(rule);
       const padding = " ".repeat(inputWidth - input.length);
-      lines.push(
-        `${styler.input(input)}${padding} => ${styler.output(ruleOutput(rule))}`,
+      sectionLines.push(
+        `${styler.value(input)}${padding} => ${styler.value(ruleOutput(rule))}`,
       );
     }
+    lines.push(sectionLines.join("\n"));
     index = end;
   }
 }
@@ -462,11 +464,10 @@ class RuleValueStyler {
     this.#formatter = level === 0 ? undefined : new Ansis(level);
   }
 
-  public input(value: string): string {
-    return this.#formatter?.bgBlue.black(value) ?? value;
-  }
-
-  public output(value: string): string {
-    return this.#formatter?.bgMagenta.black(value) ?? value;
+  public value(value: string): string {
+    if (this.#formatter === undefined) {
+      return `\`${value}\``;
+    }
+    return `${this.#formatter.red("`")}${this.#formatter.bgBlack.white(value)}${this.#formatter.red("`")}`;
   }
 }

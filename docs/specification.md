@@ -283,18 +283,20 @@ declares them and show their protocol, name, expanded command, and arguments.
 `dlog rules print` loads configuration and prints every parsed rule file in
 effective application order. Each file shows its abbreviated path, plugin
 count when nonzero, nonzero rule counts by kind, and an unconditional
-`TOTAL rules (N)` subtotal. Disabled rules and plugins are omitted; a disabled
-file remains visible with total zero. Absolute paths under the user's home
-directory begin with `~`.
+`TOTAL rules (N)` subtotal. A blank line separates the path, plugin section,
+each rule-kind section, and total. Disabled rules and plugins are omitted; a
+disabled file remains visible with total zero. Absolute paths under the user's
+home directory begin with `~`.
 
 `dlog rules print --rules` additionally prints every active plugin and rule.
 Rule sections follow configuration order and may repeat when kinds alternate;
 they are not regrouped in a way that changes the apparent application order.
 Within each section, the `=>` separators align to the widest input in that
-section. Rule input and output values use distinct background colors with black
-foreground text so leading and trailing whitespace remains visible without
-sacrificing contrast. `--color auto|always|never` follows the tail command's
-color policy and defaults to `auto`.
+section. Visible red backticks surround each input and output. The enclosed
+value uses white foreground text on a black background so leading and trailing
+whitespace remains visible. `--color auto|always|never` follows the tail
+command's color policy and defaults to `auto`; backticks remain visible without
+color.
 
 ## Configuration discovery
 

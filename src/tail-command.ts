@@ -5,8 +5,14 @@ import {
 } from "./configuration.js";
 import type { DailyDocumentReader } from "./daily-document.js";
 import { DlogError } from "./dlog-error.js";
+import {
+  resolveColorLevel,
+  ThemeStyler,
+  type ThemeProvider,
+  type ColorMode,
+} from "./theme.js";
 
-export type TailColorMode = "auto" | "always" | "never";
+export type TailColorMode = ColorMode;
 
 export interface TailOptions {
   readonly color: TailColorMode;
@@ -20,9 +26,9 @@ export interface TailCommandDependencies {
   readonly io: CommandIO;
   readonly now: () => Date;
   readonly environment: Readonly<NodeJS.ProcessEnv>;
+  readonly themeLoader: Pick<ThemeProvider, "loadForConfiguration">;
 }
 
-const SGR_RESET = "\x1b[0m";
 const LINK_PATTERN =
   /\[\[(?<page>[^\]|]+)\|(?<display>[^\]]+)\]\]|\[\[(?<bare>[^\]|]+)\]\]|\[(?<label>[^\]]+)\]\((?<url>[^)]*)\)/g;
 
@@ -39,13 +45,24 @@ export class TailCommand {
     const day = selectTailDate(options, now);
     const path = dailyDocumentPath(configuration, day);
     const lines = await this.#dependencies.documentReader.readLogSection(path);
-    const styled = shouldStyle(
+    const colorLevel = resolveColorLevel(
       options.color,
       this.#dependencies.io.isOutputTerminal(),
       this.#dependencies.environment,
     );
+    const styler =
+      colorLevel === 0
+        ? undefined
+        : new ThemeStyler(
+            (
+              await this.#dependencies.themeLoader.loadForConfiguration(
+                configuration,
+              )
+            ).theme,
+            colorLevel,
+          );
     this.#dependencies.io.writeOutput(
-      `${formatTailDate(day)}\n${renderLogSection(lines, styled)}`,
+      renderDailyLog(formatTailDate(day), lines, styler),
     );
     return 0;
   }
@@ -282,56 +299,102 @@ export function shouldStyle(
   outputIsTerminal: boolean,
   environment: Readonly<NodeJS.ProcessEnv>,
 ): boolean {
-  if (color === "always") {
-    return true;
-  }
-  if (color === "never") {
-    return false;
-  }
-  const noColor = environment["NO_COLOR"];
-  return (
-    outputIsTerminal && (noColor === undefined || noColor.trim().length === 0)
-  );
+  return resolveColorLevel(color, outputIsTerminal, environment) > 0;
+}
+
+export function renderDailyLog(
+  date: string,
+  lines: readonly string[],
+  styler?: ThemeStyler,
+): string {
+  const rendered = [
+    styler?.apply("date", date) ?? date,
+    styler?.apply("heading", "Log") ?? "Log",
+    ...lines.map((line) => renderTailLine(line, styler)),
+  ].join("\n");
+  return `${styler?.finish(rendered) ?? rendered}\n`;
 }
 
 export function renderLogSection(
   lines: readonly string[],
-  styled: boolean,
+  styler?: ThemeStyler,
 ): string {
-  const heading = styled ? `\x1b[1;36mLog${SGR_RESET}` : "Log";
-  return [heading, ...lines.map((line) => renderTailLine(line, styled))]
-    .map((line) => `${line}\n`)
-    .join("");
+  const rendered = [
+    styler?.apply("heading", "Log") ?? "Log",
+    ...lines.map((line) => renderTailLine(line, styler)),
+  ].join("\n");
+  return `${styler?.finish(rendered) ?? rendered}\n`;
 }
 
-export function renderTailLine(line: string, styled: boolean): string {
+export function renderTailLine(line: string, styler?: ThemeStyler): string {
+  const listMarker = /^([-+*])(?=\s)/.exec(line);
+  if (listMarker === null) {
+    return renderInlineMarkup(line, styler);
+  }
+
+  const marker = listMarker[1]!;
+  const remainder = line.slice(marker.length);
+  const timedEntry =
+    /^(\s+)\*((?:[01]\d|2[0-3]):[0-5]\d)\*(\s+)-(\s+)(.*)$/.exec(remainder);
+  const renderedMarker = styler?.apply("list_marker", marker) ?? marker;
+  if (timedEntry === null) {
+    return `${renderedMarker}${renderInlineMarkup(remainder, styler)}`;
+  }
+
+  const [, beforeTime, timestamp, beforeSeparator, afterSeparator, message] =
+    timedEntry;
+  return [
+    renderedMarker,
+    beforeTime,
+    styler?.apply("timestamp", timestamp!) ?? timestamp,
+    beforeSeparator,
+    styler?.apply("entry_separator", "-") ?? "-",
+    afterSeparator,
+    renderInlineMarkup(message!, styler),
+  ].join("");
+}
+
+function renderInlineMarkup(text: string, styler?: ThemeStyler): string {
   let output = "";
   let cursor = 0;
-  for (const match of line.matchAll(LINK_PATTERN)) {
+  for (const match of text.matchAll(LINK_PATTERN)) {
     const index = match.index;
-    output += renderEmphasis(line.slice(cursor, index), styled);
+    output += renderEmphasis(text.slice(cursor, index), styler);
     const display =
       match.groups?.["display"] ??
       match.groups?.["page"] ??
       match.groups?.["bare"] ??
       match.groups?.["label"] ??
       match[0];
-    output += styled ? `\x1b[4;34m${display}${SGR_RESET}` : display;
+    const role =
+      match.groups?.["url"] === undefined ? "wiki_link" : "external_link";
+    output += styler?.apply(role, display, "message") ?? display;
     cursor = index + match[0].length;
   }
-  output += renderEmphasis(line.slice(cursor), styled);
+  output += renderEmphasis(text.slice(cursor), styler);
   return output;
 }
 
-function renderEmphasis(text: string, styled: boolean): string {
-  const bold = text.replace(/\*\*([^*]+)\*\*/g, (_match, content: string) =>
-    styled ? `\x1b[1m${content}${SGR_RESET}` : content,
-  );
-  return bold
-    .replace(/\*([^*]+)\*/g, (_match, content: string) =>
-      styled ? `\x1b[3m${content}${SGR_RESET}` : content,
-    )
-    .replace(/_([^_]+)_/g, (_match, content: string) =>
-      styled ? `\x1b[3m${content}${SGR_RESET}` : content,
-    );
+function renderEmphasis(text: string, styler?: ThemeStyler): string {
+  const pattern = /\*\*([^*]+)\*\*|\*([^*]+)\*|_([^_]+)_/g;
+  let output = "";
+  let cursor = 0;
+  for (const match of text.matchAll(pattern)) {
+    output += renderMessageText(text.slice(cursor, match.index), styler);
+    const strong = match[1];
+    const content = strong ?? match[2] ?? match[3] ?? match[0];
+    output +=
+      styler?.apply(
+        strong === undefined ? "emphasis" : "strong",
+        content,
+        "message",
+      ) ?? content;
+    cursor = match.index + match[0].length;
+  }
+  output += renderMessageText(text.slice(cursor), styler);
+  return output;
+}
+
+function renderMessageText(text: string, styler?: ThemeStyler): string {
+  return styler?.apply("message", text) ?? text;
 }

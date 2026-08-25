@@ -16,6 +16,7 @@ import {
   type OperationalLogger,
   type WatchClock,
 } from "./fixup-watcher.js";
+import { ThemeLoader } from "./theme.js";
 
 const NOW = new Date(2025, 6, 25, 10, 30, 0, 0);
 const temporaryDirectories: string[] = [];
@@ -111,15 +112,21 @@ ${include}`,
     homeDirectory: root,
     variables: { DLOG_CONFIG: configPath, PATH: process.env["PATH"] },
   };
+  const configurationLoader = new ConfigurationLoader({
+    environment: configEnvironment,
+  });
+  const themeLoader = new ThemeLoader({
+    configurationLoader,
+    environment: configEnvironment,
+  });
   return {
     root,
     documentPath,
     io,
     dependencies: {
       io,
-      configurationLoader: new ConfigurationLoader({
-        environment: configEnvironment,
-      }),
+      configurationLoader,
+      themeLoader,
       documentReader: new DailyDocumentReader(),
       documentWriter: new DailyDocumentWriter(),
       clock: new FixedClock(),
@@ -219,7 +226,7 @@ path = "rules.toml"
     const fixture = await cliFixture();
     expect(await runCli("dlog", [], fixture.dependencies)).toBe(1);
     expect(fixture.io.error).toContain(
-      "explicit append, fixup, or tail subcommand",
+      "explicit append, fixup, tail, or theme subcommand",
     );
   });
 
@@ -244,6 +251,21 @@ path = "rules.toml"
     expect(await readFile(fixture.documentPath, "utf8")).not.toContain(
       "Narrative",
     );
+  });
+
+  test("theme subcommand dumps the active theme without an executable alias", async () => {
+    const fixture = await cliFixture();
+    expect(
+      await runCli(
+        "dlog",
+        ["theme", "--dump", "--silent"],
+        fixture.dependencies,
+      ),
+    ).toBe(0);
+    expect(fixture.io.output).toStartWith('schema = "dlog-theme/v1"\n');
+
+    const aliasFixture = await cliFixture();
+    expect(await runCli("dlog-theme", [], aliasFixture.dependencies)).toBe(1);
   });
 });
 

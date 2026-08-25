@@ -17,6 +17,7 @@ import {
   type WatchClock,
 } from "./fixup-watcher.js";
 import { parseTailOptions, resolveTailDate } from "./tail-command.js";
+import { ThemeLoader } from "./theme.js";
 
 const NOW = new Date(2025, 6, 25, 10, 30, 0, 0);
 const temporaryDirectories: string[] = [];
@@ -117,15 +118,21 @@ entry_prefix = "- *%H:%M* - "
     homeDirectory: root,
     variables: environment,
   };
+  const configurationLoader = new ConfigurationLoader({
+    environment: configEnvironment,
+  });
+  const themeLoader = new ThemeLoader({
+    configurationLoader,
+    environment: configEnvironment,
+  });
   return {
     documentPath: join(vault, "2025-07-25.md"),
     io,
     environment,
     dependencies: {
       io,
-      configurationLoader: new ConfigurationLoader({
-        environment: configEnvironment,
-      }),
+      configurationLoader,
+      themeLoader,
       documentReader: new DailyDocumentReader(),
       documentWriter: new DailyDocumentWriter(),
       clock: new FixedClock(now),
@@ -173,15 +180,21 @@ entry_prefix = "- *%H:%M* - "
     homeDirectory: root,
     variables: environment,
   };
+  const configurationLoader = new ConfigurationLoader({
+    environment: configEnvironment,
+  });
+  const themeLoader = new ThemeLoader({
+    configurationLoader,
+    environment: configEnvironment,
+  });
   return {
     documentPath,
     io,
     environment,
     dependencies: {
       io,
-      configurationLoader: new ConfigurationLoader({
-        environment: configEnvironment,
-      }),
+      configurationLoader,
+      themeLoader,
       documentReader: new DailyDocumentReader(),
       documentWriter: new DailyDocumentWriter(),
       clock: new FixedClock(),
@@ -199,6 +212,12 @@ entry_prefix = "- *%H:%M* - "
 
 const ESC = "\x1b[";
 const DATE_HEADING = "2025-07-25-Fri\n";
+const STYLED_DATE_HEADING = `${ESC}90m2025-07-25-Fri${ESC}39m\n`;
+const STYLED_HEADING = `${ESC}36m${ESC}1mLog${ESC}22m${ESC}39m\n`;
+const STYLED_MARKER = `${ESC}35m-${ESC}39m`;
+const styledTime = (time: string): string =>
+  `${ESC}33m${ESC}3m${time}${ESC}23m${ESC}39m`;
+const STYLED_SEPARATOR = `${ESC}90m-${ESC}39m`;
 
 describe("tail CLI conformance", () => {
   test("TAIL-01 renders heading and entry with forced styling", async () => {
@@ -211,7 +230,7 @@ describe("tail CLI conformance", () => {
 
     expect(status).toBe(0);
     expect(fixture.io.output).toBe(
-      `${DATE_HEADING}${ESC}1;36mLog${ESC}0m\n- ${ESC}3m09:00${ESC}0m - Coffee\n`,
+      `${STYLED_DATE_HEADING}${STYLED_HEADING}${STYLED_MARKER} ${styledTime("09:00")} ${STYLED_SEPARATOR} Coffee${ESC}0m\n`,
     );
   });
 
@@ -227,7 +246,7 @@ describe("tail CLI conformance", () => {
 
     expect(status).toBe(0);
     expect(fixture.io.output).toBe(
-      `${DATE_HEADING}${ESC}1;36mLog${ESC}0m\n- ${ESC}3m10:30${ESC}0m - Shipped ${ESC}1mrelease${ESC}0m build\n`,
+      `${STYLED_DATE_HEADING}${STYLED_HEADING}${STYLED_MARKER} ${styledTime("10:30")} ${STYLED_SEPARATOR} Shipped ${ESC}1mrelease${ESC}22m build${ESC}0m\n`,
     );
   });
 
@@ -243,7 +262,7 @@ describe("tail CLI conformance", () => {
 
     expect(status).toBe(0);
     expect(fixture.io.output).toBe(
-      `${DATE_HEADING}${ESC}1;36mLog${ESC}0m\n- ${ESC}3m11:00${ESC}0m - Reviewed ${ESC}4;34mPage${ESC}0m and ${ESC}4;34mthe plan${ESC}0m; keep [[oops\n`,
+      `${STYLED_DATE_HEADING}${STYLED_HEADING}${STYLED_MARKER} ${styledTime("11:00")} ${STYLED_SEPARATOR} Reviewed ${ESC}34m${ESC}4mPage${ESC}24m${ESC}39m and ${ESC}34m${ESC}4mthe plan${ESC}24m${ESC}39m; keep [[oops${ESC}0m\n`,
     );
   });
 
@@ -259,7 +278,7 @@ describe("tail CLI conformance", () => {
 
     expect(status).toBe(0);
     expect(fixture.io.output).toBe(
-      `${DATE_HEADING}${ESC}1;36mLog${ESC}0m\n- ${ESC}3m12:00${ESC}0m - Read ${ESC}4;34mstatus${ESC}0m\n`,
+      `${STYLED_DATE_HEADING}${STYLED_HEADING}${STYLED_MARKER} ${styledTime("12:00")} ${STYLED_SEPARATOR} Read ${ESC}36m${ESC}4mstatus${ESC}24m${ESC}39m${ESC}0m\n`,
     );
   });
 
@@ -351,7 +370,45 @@ describe("tail CLI conformance", () => {
     );
 
     expect(status).toBe(0);
-    expect(fixture.io.output).toContain(`${ESC}1;36mLog${ESC}0m`);
+    expect(fixture.io.output).toContain(STYLED_HEADING.trimEnd());
+  });
+
+  test("themes unordered markers and only valid canonical timestamps", async () => {
+    const fixture = await tailFixture(
+      "# Log\n\n+ *23:59* - Valid\n* *24:00* - Invalid\n- ordinary\n",
+    );
+    const status = await runCli(
+      "dlog",
+      ["tail", "--color=always"],
+      fixture.dependencies,
+    );
+
+    expect(status).toBe(0);
+    expect(fixture.io.output).toContain(
+      `${ESC}35m+${ESC}39m ${styledTime("23:59")} ${STYLED_SEPARATOR} Valid`,
+    );
+    expect(fixture.io.output).toContain(
+      `${ESC}35m*${ESC}39m ${ESC}3m24:00${ESC}23m - Invalid`,
+    );
+    expect(fixture.io.output).toContain(`${ESC}35m-${ESC}39m ordinary`);
+  });
+
+  test("loads and validates a selected theme only when styling is enabled", async () => {
+    const plain = await tailFixture("# Log\n\n- *09:00* - Coffee\n");
+    plain.environment["DLOG_THEME"] = "missing-theme.toml";
+    expect(
+      await runCli("dlog", ["tail", "--color=never"], plain.dependencies),
+    ).toBe(0);
+    expect(plain.io.output).toBe(`${DATE_HEADING}Log\n- 09:00 - Coffee\n`);
+
+    const styled = await tailFixture("# Log\n\n- *09:00* - Coffee\n");
+    styled.environment["DLOG_THEME"] = "missing-theme.toml";
+    expect(
+      await runCli("dlog", ["tail", "--color=always"], styled.dependencies),
+    ).toBe(1);
+    expect(styled.io.error).toContain(
+      "Theme file does not exist or is not readable",
+    );
   });
 });
 

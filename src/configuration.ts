@@ -109,6 +109,7 @@ const primaryConfigSchema = z.strictObject({
   daily_path: z.string().min(1),
   entry_prefix: z.string(),
   debug_output: z.string().min(1).optional(),
+  theme: z.string().min(1).optional(),
   includes: z.array(includeSchema).default([]),
 });
 
@@ -135,6 +136,7 @@ export interface LoadedConfiguration {
   readonly dailyPathTemplate: string;
   readonly entryPrefixTemplate: string;
   readonly debugOutputPath?: string;
+  readonly themePath?: string;
   readonly rules: readonly ProcessingRule[];
   readonly plugins: readonly ExternalPluginDefinition[];
 }
@@ -150,7 +152,7 @@ export class ConfigurationLoader {
     this.#environment = options.environment;
   }
 
-  public async discover(): Promise<string> {
+  public async discoverOptional(): Promise<string | undefined> {
     const configuredPath = this.#environment.variables["DLOG_CONFIG"]?.trim();
     const candidates = [
       ...(configuredPath === undefined || configuredPath.length === 0
@@ -175,7 +177,14 @@ export class ConfigurationLoader {
         // Try the next discovery candidate.
       }
     }
+    return undefined;
+  }
 
+  public async discover(): Promise<string> {
+    const discovered = await this.discoverOptional();
+    if (discovered !== undefined) {
+      return discovered;
+    }
     throw new DlogError(
       `No readable dlog configuration found; expected ${DEFAULT_CONFIG_DISPLAY_PATH}`,
     );
@@ -234,6 +243,13 @@ export class ConfigurationLoader {
             expandConfiguredPath(primary.debug_output, this.#environment),
             primaryDirectory,
           );
+    const themePath =
+      primary.theme === undefined
+        ? undefined
+        : resolvePathField(
+            expandConfiguredPath(primary.theme, this.#environment),
+            primaryDirectory,
+          );
 
     return {
       sourcePath: absoluteSource,
@@ -241,6 +257,7 @@ export class ConfigurationLoader {
       dailyPathTemplate,
       entryPrefixTemplate: primary.entry_prefix,
       ...(debugOutputPath === undefined ? {} : { debugOutputPath }),
+      ...(themePath === undefined ? {} : { themePath }),
       rules,
       plugins,
     };

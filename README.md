@@ -46,6 +46,10 @@ dlog tail Mon               # most recent Monday (today if Monday)
 dlog tail 9                 # the 9th of this month
 dlog tail 0709              # July 9 of this year
 dlog tail 2026-08-09        # also: 08/09/2026 or "August 9 2026"
+dlog theme                  # deterministic preview of the active theme
+dlog theme --swatches       # one styled sample for every semantic role
+dlog theme --dump --silent  # complete reusable theme.toml on stdout
+dlog theme --check          # validate through exit status
 ```
 
 The argv0 aliases are equivalent:
@@ -93,6 +97,7 @@ vault_roots = [
 # Uses the documented strftime package dialect and local time.
 daily_path = "logs/%Y/%m-%b/%Y-%m-%d-%a.md"
 entry_prefix = "- *%H:%M* - "
+theme = "theme.toml" # optional; relative to this config
 
 [[includes]]
 path = "rules"
@@ -106,6 +111,42 @@ An include can name one TOML file or a directory. A directory contributes its
 immediate, non-hidden `*.toml` files in lexical filename order. Rule files may
 include more paths, but every relative path remains relative to the primary
 configuration directory. Include cycles and repeated files are errors.
+
+## Renderer themes
+
+Theme selection is `$DLOG_THEME`, then the primary config's `theme`, then
+`theme.toml` beside the primary config, then the built-in default. A relative
+`DLOG_THEME` resolves from the invocation directory; a config path resolves
+from the config directory.
+
+Theme files are strict, independently versioned TOML. They may override only
+the roles that need changing:
+
+```toml
+schema = "dlog-theme/v1"
+
+[roles.timestamp]
+fg = "#E5C07B"
+bold = true
+
+[roles.external_link]
+inherit = false
+fg = "bright_cyan"
+underline = true
+```
+
+Available roles are `date`, `heading`, `list_marker`, `timestamp`,
+`entry_separator`, `message`, `strong`, `emphasis`, `wiki_link`, and
+`external_link`. Each role accepts `inherit`, `fg`, `bg`, `reset`, `inverse`,
+`hidden`, `visible`, `bold`, `dim`, `italic`, `underline`, and
+`strikethrough`. Colors are `default`, lowercase ANSI names, canonical
+`bright_*` names, or six-digit `#RRGGBB`.
+
+`inherit` defaults to true. Set it false to replace the built-in role rather
+than merge with it. Use `dlog theme --dump --silent > theme.toml` to obtain a
+complete editable snapshot. Preview is on by default; `--swatches`, `--check`,
+and `--dump` are off. Every boolean option has a `--no-*` form. When any
+positive action flag is supplied, unspecified actions are disabled.
 
 ## Rule files
 

@@ -28,11 +28,18 @@ import {
   parseTailOptions,
   type TailCommandDependencies,
 } from "./tail-command.js";
+import {
+  ThemeCommand,
+  parseThemeOptions,
+  type ThemeCommandDependencies,
+} from "./theme-command.js";
+import { ThemeLoader, type ThemeProvider } from "./theme.js";
 
 const ROOT_HELP = `Usage:
   dlog append [--] [WORDS...]
   dlog fixup [OPTIONS]
   dlog tail [OPTIONS] [DATE]
+  dlog theme [OPTIONS]
   dlog-append [--] [WORDS...]
   dlog-fixup [OPTIONS]
   dlog-tail [OPTIONS] [DATE]
@@ -69,10 +76,25 @@ Options:
   -h, --help                   Show this help
 `;
 
+const THEME_HELP = `Usage: dlog theme [OPTIONS]
+
+Validate and inspect the active renderer theme.
+
+Options:
+      --preview, --no-preview    Render a representative log (default on)
+      --swatches, --no-swatches  Render one sample for every theme role
+      --check, --no-check        Validate using exit status only
+      --dump, --no-dump          Emit complete resolved dlog-theme/v1 TOML
+      --silent, --no-silent      Suppress the selected-theme source diagnostic
+      --color WHEN               Emit ANSI styling: auto, always, never (default auto)
+  -h, --help                     Show this help
+`;
+
 export interface CliDependencies {
   readonly io: CommandIO;
   readonly configurationLoader: ConfigurationLoader;
   readonly documentReader: DailyDocumentReader;
+  readonly themeLoader: ThemeProvider;
   readonly documentWriter: DailyDocumentWriter;
   readonly clock: WatchClock;
   readonly hasher: FileHasher;
@@ -114,10 +136,13 @@ export async function runCli(
     if (command === "tail") {
       return await runTail(arguments_.slice(1), dependencies);
     }
+    if (command === "theme") {
+      return await runTheme(arguments_.slice(1), dependencies);
+    }
 
     dependencies.io.writeError(
       command === undefined
-        ? `dlog: an explicit append, fixup, or tail subcommand is required\n${ROOT_HELP}`
+        ? `dlog: an explicit append, fixup, tail, or theme subcommand is required\n${ROOT_HELP}`
         : `dlog: unknown subcommand: ${command}\n${ROOT_HELP}`,
     );
     return 1;
@@ -132,10 +157,15 @@ export async function runCli(
 
 export function createDefaultCliDependencies(): CliDependencies {
   const configurationEnvironment = defaultConfigurationEnvironment();
+  const configurationLoader = new ConfigurationLoader({
+    environment: configurationEnvironment,
+  });
   const clock = new SystemWatchClock();
   return {
     io: new ProcessCommandIO(),
-    configurationLoader: new ConfigurationLoader({
+    configurationLoader,
+    themeLoader: new ThemeLoader({
+      configurationLoader,
       environment: configurationEnvironment,
     }),
     documentReader: new DailyDocumentReader(),
@@ -207,8 +237,26 @@ async function runTail(
     io: dependencies.io,
     now: () => dependencies.clock.now(),
     environment: dependencies.environment,
+    themeLoader: dependencies.themeLoader,
   };
   return new TailCommand(commandDependencies).run(parsed);
+}
+
+async function runTheme(
+  arguments_: readonly string[],
+  dependencies: CliDependencies,
+): Promise<number> {
+  const parsed = parseThemeOptions(arguments_);
+  if (parsed === "help") {
+    dependencies.io.writeOutput(THEME_HELP);
+    return 0;
+  }
+  const commandDependencies: ThemeCommandDependencies = {
+    io: dependencies.io,
+    themeLoader: dependencies.themeLoader,
+    environment: dependencies.environment,
+  };
+  return new ThemeCommand(commandDependencies).run(parsed);
 }
 
 export function parseFixupOptions(

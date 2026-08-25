@@ -300,4 +300,29 @@ entry_prefix = ""
       ),
     ).rejects.toThrow("schema");
   });
+
+  test("resolves the optional theme path from the primary parent", async () => {
+    const root = await testRoot();
+    const configDirectory = join(root, "config");
+    await mkdir(configDirectory);
+    const path = join(configDirectory, "config.toml");
+    await writeFile(
+      path,
+      `${primaryToml(root)}theme = "themes/night.toml"\n`,
+      "utf8",
+    );
+
+    const loaded = await new ConfigurationLoader({
+      environment: environment(root),
+    }).load(path);
+    expect(loaded.themePath).toBe(
+      join(configDirectory, "themes", "night.toml"),
+    );
+  });
+
+  test("optional discovery returns undefined when no config exists", async () => {
+    const root = await testRoot();
+    const loader = new ConfigurationLoader({ environment: environment(root) });
+    expect(await loader.discoverOptional()).toBeUndefined();
+  });
 });

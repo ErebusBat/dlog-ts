@@ -114,36 +114,50 @@ Tail displays everything in the section. It does not apply the writer's standard
 
 #### Rendering rules
 
-The date line always renders as plain text. The heading renders as its text `Log` without the `# ` marker. Each section line renders with this inline markup consumed and styled, following Obsidian display rules:
+The renderer assigns semantic roles independently of Markdown delimiters:
 
-| Markup               | Display                                  |
-| -------------------- | ---------------------------------------- |
-| `**text**`           | `text`, bold                             |
-| `*text*` or `_text_` | `text`, italic                           |
-| `[[page]]`           | `page`, link style                       |
-| `[[page\|display]]`  | `display`, link style                    |
-| `[text](url)`        | `text`, link style; the URL is not shown |
+| Role              | Content                                                |
+| ----------------- | ------------------------------------------------------ |
+| `date`            | The leading `YYYY-MM-DD-Day` line.                     |
+| `heading`         | The generated `Log` heading only.                      |
+| `list_marker`     | A leading `-`, `+`, or `*` followed by whitespace.     |
+| `timestamp`       | A strict 24-hour `HH:MM` in a canonical timed entry.   |
+| `entry_separator` | The hyphen following a canonical timestamp.            |
+| `message`         | Ordinary entry text.                                   |
+| `strong`          | Display text from `**text**`.                          |
+| `emphasis`        | Display text from `*text*` or `_text_`.                |
+| `wiki_link`       | Display text from `[[page]]` or `[[page\|display]]`.   |
+| `external_link`   | Display text from `[text](url)`; the URL is not shown. |
 
-Parsing precedence is links first, then bold, then italic. Unmatched or unterminated markers render literally. Markup inside link display text is not further parsed.
+A canonical timed entry is an unordered marker followed by whitespace,
+`*HH:MM*`, whitespace, a hyphen, whitespace, and message text. Hours must be
+`00`–`23` and minutes `00`–`59`. Any unordered marker is styled even when the
+rest of the line is not canonical. Only the marker and separator characters,
+not surrounding whitespace, receive their respective roles.
 
-When styling is enabled, the renderer wraps each span in ANSI SGR sequences:
-
-- Heading: bold cyan, `\x1b[1;36m` … `\x1b[0m`.
-- Bold: `\x1b[1m` … `\x1b[0m`.
-- Italic: `\x1b[3m` … `\x1b[0m`.
-- Link style: underline blue, `\x1b[4;34m` … `\x1b[0m`.
-
-Each span resets with `\x1b[0m` so nesting requires no partial-reset logic.
+Parsing precedence is links first, then bold, then italic. Unmatched or
+unterminated markers render literally. Markup inside link display text is not
+further parsed. Inline roles compose with `message`: modifiers accumulate and
+an inline foreground or background replaces the message color.
 
 #### Color policy
 
 The command accepts these options:
 
-| Option                                                                                                                                                                                                                                                                                                                                  | Meaning                                                      | Default |
-| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ | ------- |
-| `-w`                                                                                                                                                                                                                                                                                                                                    | Select the previous weekday. Cannot be combined with `DATE`. | Off     |
-| `--color WHEN`                                                                                                                                                                                                                                                                                                                          | `auto`, `always`, or `never`.                                | `auto`  |
-| In `auto` mode, styling is emitted only when standard output is a terminal and the `NO_COLOR` environment variable is unset or blank. `NO_COLOR` forces plain output in `auto` mode; `--color=always` overrides it. Plain output is the display text alone: heading text, link display text, and no markup markers or escape sequences. |
+| Option         | Meaning                                     | Default |
+| -------------- | ------------------------------------------- | ------- |
+| `-w`           | Select the previous weekday; excludes DATE. | Off     |
+| `--color WHEN` | `auto`, `always`, or `never`.               | `auto`  |
+
+`always` emits level-3 truecolor even when output is redirected or `NO_COLOR`
+is set. `never` emits no ANSI sequences. In `auto`, `FORCE_COLOR=0..3` has
+first precedence. Otherwise, a nonblank `NO_COLOR` or non-terminal standard
+output disables styling; a terminal uses detected ANSI capability from its
+environment. A theme is loaded and validated only when the resulting level is
+nonzero. Plain output consumes supported markup but emits only display text.
+
+Every styled output segment closes its composed styles and ends with SGR reset
+`\x1b[0m` before subsequent plain output or command completion.
 
 #### Date argument
 
@@ -160,6 +174,84 @@ The command accepts one optional positional date argument selecting the day, def
 | Month name   | Full or three-letter English month, day, and year, with optional comma: `August 9 2026`, `Aug 9, 2026`. |
 
 A syntactic match that is semantically invalid — `31` in a 30-day month, `0230`, `2025` as `MMDD` (month 20) — is an error and never falls through to a later form. An argument matching no form is an error naming the unparseable input. A valid date whose daily document does not exist fails exactly as the append command's missing document does.
+
+### Theme command
+
+`dlog theme` validates and inspects the active renderer theme. It has no
+`dlog-theme` executable alias and can operate without a primary configuration.
+
+| Boolean option                | Default |
+| ----------------------------- | ------- |
+| `--preview`, `--no-preview`   | On      |
+| `--swatches`, `--no-swatches` | Off     |
+| `--check`, `--no-check`       | Off     |
+| `--dump`, `--no-dump`         | Off     |
+| `--silent`, `--no-silent`     | Off     |
+
+If any positive action option (`preview`, `swatches`, `check`, or `dump`) is
+present, unspecified actions begin off. Otherwise the defaults apply. Process
+all explicit boolean options in argument order; the last occurrence wins.
+`silent` and `--color auto|always|never` do not affect action defaults. An
+invocation with no enabled action succeeds without loading a theme or writing
+output.
+
+Every active invocation loads and validates the selected theme. Unless
+`--silent` is active, it writes `Theme: built-in default` or
+`Theme: <absolute-path>` to standard error. Errors are never silenced.
+
+- **preview** writes a fixed deterministic representative log block exercising
+  every semantic role;
+- **swatches** writes roles in schema order, each as an unstyled role name and
+  a styled sample;
+- **check** adds no success output and communicates validity through status;
+- **dump** writes a complete reusable `dlog-theme/v1` TOML snapshot with every
+  role and property explicit and `inherit = false`.
+
+When combined, standard output contains preview, swatches, and dump in that
+order with one blank line between enabled output sections. Dumped colors are
+the effective theme values before terminal capability conversion, and hex
+colors are normalized to uppercase. Preview and swatches use the tail color
+policy; check and dump contain no escape sequences.
+
+#### Theme discovery
+
+Choose the first applicable source:
+
+1. Nonblank `DLOG_THEME`; relative paths resolve from the invocation directory.
+2. Optional `theme = "path"` in the primary config; relative paths resolve from
+   the primary config directory.
+3. `theme.toml` beside the primary config.
+4. The built-in default.
+
+Explicit environment or config paths support normal path expansion and must
+name a readable file. A missing conventional sibling selects the built-in
+default. Existing empty, malformed, or schema-invalid theme files are errors.
+For `dlog theme`, `DLOG_THEME` does not require a primary config. Without that
+environment value, a discovered primary config is fully loaded and validated;
+if none is discovered, the command uses the built-in theme.
+
+#### Theme schema
+
+A theme is strict TOML with `schema = "dlog-theme/v1"` and optional
+`[roles.<name>]` tables for the ten renderer roles. Unknown roles and
+properties are errors. Omitted roles and properties inherit the built-in
+theme. `inherit` defaults to true; false starts that role from default
+foreground/background and all modifiers false. Explicit false disables an
+inherited modifier. `fg = "default"` and `bg = "default"` clear inherited
+colors.
+
+Colors are `default`, lowercase ANSI names from `black` through `white`,
+canonical `bright_black` through `bright_white`, or exactly `#RRGGBB`
+(case-insensitive input). Style properties are `inherit`, `fg`, `bg`, `reset`,
+`inverse`, `hidden`, `visible`, `bold`, `dim`, `italic`, `underline`, and
+`strikethrough`. `reset` clears composed parent styling before applying the
+role. `visible` cancels inherited `hidden`; a resolved role cannot enable both.
+
+The built-in theme uses bright-black date and separator, bold cyan heading,
+magenta list marker, italic yellow timestamp, terminal-default message, bold
+strong text, italic emphasis, underlined blue wiki links, and underlined cyan
+external links. Backgrounds use the terminal default and all other modifiers
+are false.
 
 ## Configuration discovery
 
@@ -186,6 +278,7 @@ rule files own only includes, plugins, and processing rules.
 | `vaultRoots`       | Required ordered directory paths. Expand each path and select the first existing directory; reject the configuration if none qualify. The selected value is the runtime `vaultRoot`.                                                        |
 | `dailyPath`        | Required strftime template evaluated with the local day. Resolve a relative result beneath `vaultRoot`; the returned path must exist and be a regular file.                                                                                 |
 | `entryPrefix`      | Required strftime template. Its result precedes entry text exactly; an empty static string is allowed.                                                                                                                                      |
+| `theme`            | Optional theme-file path. Expand it and resolve a relative value from the primary configuration parent.                                                                                                                                     |
 | `rules`            | One ordered, discriminated list containing prefix, global, wiki-link, and callback rules.                                                                                                                                                   |
 | `includes`         | Optional rule files or directories. Resolve every relative path against the primary configuration parent, including nested includes. A directory loads its immediate non-hidden `*.toml` files lexically. Reject cycles and repeated files. |
 | `enabled`          | Optional on includes, rule files, plugins, and rules; defaults to true. Disabled content is schema-validated but otherwise inert.                                                                                                           |

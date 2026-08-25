@@ -62,14 +62,15 @@ The application is entirely local except for optional external executables such 
 ## Public command contracts
 
 The TypeScript CLI is one argv0-aware executable. `dlog` is a strict dispatcher
-requiring `append`, `fixup`, or `tail`. Symlinks named `dlog-append`,
-`dlog-fixup`, and `dlog-tail` infer the corresponding subcommand.
+requiring `append`, `fixup`, `tail`, `theme`, or `rules`. Symlinks named
+`dlog-append`, `dlog-fixup`, and `dlog-tail` infer the corresponding subcommand.
+`theme` and `rules` have no executable aliases.
 
 ### Append command
 
 Usage supports this option:
 
-* `--no-write`: process and render a would-be append entry, but do not write to the daily document.
+- `--no-write`: process and render a would-be append entry, but do not write to the daily document.
 
 The invocation rules are:
 
@@ -87,6 +88,7 @@ If `--no-write` is set, step 7 is skipped, and a warning is emitted to standard 
 The normal success path does not expose a separate success status; standard process status `0` is expected. Configuration, vault, document, and callback failures propagate as errors rather than being converted to structured CLI error messages.
 
 There is no option to select another date. Appending always uses the local current day.
+
 ### Fixup command
 
 The secondary command normalizes the `# Log` section without adding an entry. It has two modes:
@@ -263,6 +265,34 @@ magenta list marker, italic yellow timestamp, terminal-default message, bold
 strong text, italic emphasis, underlined blue wiki links, and underlined cyan
 external links. Backgrounds use the terminal default and all other modifiers
 are false.
+
+### Rules command
+
+`dlog rules` inspects supported rule types and the active TypeScript
+configuration. It has no `dlog-rules` executable alias.
+
+With no nested command, it prints every supported kind (`prefix`, `global`,
+`callback`, and `link`) with a short description. `dlog rules info RULE_TYPE`
+prints the kind's semantics, a valid TOML configuration example, and sample
+append input and output. These two forms do not load configuration.
+
+`dlog rules plugin` loads configuration and prints every enabled, installed
+plugin in registration order. Plugins are grouped under the rule file that
+declares them and show their protocol, name, expanded command, and arguments.
+
+`dlog rules print` loads configuration and prints every parsed rule file in
+effective application order. Each file shows its abbreviated path, plugin
+count when nonzero, nonzero rule counts by kind, and an unconditional
+`TOTAL rules (N)` subtotal. Disabled rules and plugins are omitted; a disabled
+file remains visible with total zero. Absolute paths under the user's home
+directory begin with `~`.
+
+`dlog rules print --rules` additionally prints every active plugin and rule.
+Rule sections follow configuration order and may repeat when kinds alternate;
+they are not regrouped in a way that changes the apparent application order.
+Rule input and output values use distinct background colors so leading and
+trailing whitespace remains visible. `--color auto|always|never` follows the
+tail command's color policy and defaults to `auto`.
 
 ## Configuration discovery
 

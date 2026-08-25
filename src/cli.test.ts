@@ -233,9 +233,7 @@ path = "rules.toml"
     );
 
     expect(status).toBe(0);
-    expect(fixture.io.output).toBe(
-      "- *10:30* - Persisted without write\n",
-    );
+    expect(fixture.io.output).toBe("- *10:30* - Persisted without write\n");
     expect(fixture.io.error).toBe(
       "Warning: --no-write is set; this entry was not written to the daily document.\n",
     );
@@ -282,7 +280,7 @@ path = "rules.toml"
     const fixture = await cliFixture();
     expect(await runCli("dlog", [], fixture.dependencies)).toBe(1);
     expect(fixture.io.error).toContain(
-      "explicit append, fixup, tail, or theme subcommand",
+      "explicit append, fixup, tail, theme, or rules subcommand",
     );
   });
 
@@ -322,6 +320,16 @@ path = "rules.toml"
 
     const aliasFixture = await cliFixture();
     expect(await runCli("dlog-theme", [], aliasFixture.dependencies)).toBe(1);
+  });
+
+  test("rules subcommand is available only through the dispatcher", async () => {
+    const fixture = await cliFixture();
+    expect(await runCli("dlog", ["rules"], fixture.dependencies)).toBe(0);
+    expect(fixture.io.output).toStartWith("Kind      Description\n");
+
+    const aliasFixture = await cliFixture();
+    expect(await runCli("dlog-rules", [], aliasFixture.dependencies)).toBe(1);
+    expect(aliasFixture.io.output).toBe("");
   });
 });
 

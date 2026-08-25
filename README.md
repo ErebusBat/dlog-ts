@@ -51,6 +51,11 @@ dlog theme                  # deterministic preview of the active theme
 dlog theme --swatches       # one styled sample for every semantic role
 dlog theme --dump --silent  # complete reusable theme.toml on stdout
 dlog theme --check          # validate through exit status
+dlog rules                  # list supported rule types
+dlog rules info prefix      # detailed help and examples
+dlog rules plugin           # inspect configured plugins
+dlog rules print            # rule files and counts
+dlog rules print --rules    # include rules in application order
 ```
 
 The argv0 aliases are equivalent:
@@ -60,6 +65,8 @@ dlog-append Had coffee with Sarah
 dlog-fixup --watch
 dlog-tail
 ```
+
+`theme` and `rules` intentionally have no argv0 aliases.
 
 Append arguments are joined with one space. Prefix an argument list with `--`
 to log a word that would otherwise be CLI syntax.

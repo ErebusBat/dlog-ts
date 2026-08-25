@@ -121,13 +121,18 @@ const ruleFileSchema = z.strictObject({
   rules: z.array(ruleSchema).default([]),
 });
 
-type ParsedRule = z.infer<typeof ruleSchema>;
+export type ConfiguredRule = z.infer<typeof ruleSchema>;
 type ParsedPlugin = z.infer<typeof pluginSchema>;
 
 export interface ConfigurationEnvironment {
   readonly cwd: string;
   readonly homeDirectory: string;
   readonly variables: Readonly<NodeJS.ProcessEnv>;
+}
+export interface LoadedRuleFile {
+  readonly sourcePath: string;
+  readonly plugins: readonly ExternalPluginDefinition[];
+  readonly rules: readonly ConfiguredRule[];
 }
 
 export interface LoadedConfiguration {
@@ -139,6 +144,7 @@ export interface LoadedConfiguration {
   readonly themePath?: string;
   readonly rules: readonly ProcessingRule[];
   readonly plugins: readonly ExternalPluginDefinition[];
+  readonly ruleFiles: readonly LoadedRuleFile[];
 }
 
 export interface ConfigurationLoaderOptions {
@@ -230,7 +236,7 @@ export class ConfigurationLoader {
         await collector.loadPath(include.path);
       }
     }
-    const { rules, plugins } = collector.build();
+    const { rules, plugins, ruleFiles } = collector.build();
 
     const dailyPathTemplate = expandConfiguredPath(
       primary.daily_path,
@@ -260,6 +266,7 @@ export class ConfigurationLoader {
       ...(themePath === undefined ? {} : { themePath }),
       rules,
       plugins,
+      ruleFiles,
     };
   }
 }
@@ -290,14 +297,18 @@ export function entryPrefix(
   return strftime(configuration.entryPrefixTemplate, timestamp);
 }
 
+interface CollectedRuleFile {
+  readonly sourcePath: string;
+  readonly rules: readonly ConfiguredRule[];
+  readonly plugins: readonly ParsedPlugin[];
+}
+
 class RuleFileCollector {
   readonly #primaryDirectory: string;
   readonly #environment: ConfigurationEnvironment;
   readonly #activeFiles = new Set<string>();
   readonly #loadedFiles = new Set<string>();
-  readonly #rules: ParsedRule[] = [];
-  readonly #plugins: ParsedPlugin[] = [];
-
+  readonly #files: CollectedRuleFile[] = [];
   public constructor(
     primaryDirectory: string,
     environment: ConfigurationEnvironment,
@@ -345,53 +356,62 @@ class RuleFileCollector {
   public build(): {
     readonly rules: readonly ProcessingRule[];
     readonly plugins: readonly ExternalPluginDefinition[];
+    readonly ruleFiles: readonly LoadedRuleFile[];
   } {
+    const ruleFiles: LoadedRuleFile[] = this.#files.map((file) => ({
+      sourcePath: file.sourcePath,
+      plugins: file.plugins.map((plugin) => this.#convertPlugin(plugin)),
+      rules: file.rules,
+    }));
+
     const plugins: ExternalPluginDefinition[] = [];
     const pluginNames = new Set<string>();
-    for (const plugin of this.#plugins) {
-      if (!plugin.enabled) {
-        continue;
+    for (const file of ruleFiles) {
+      for (const plugin of file.plugins) {
+        if (pluginNames.has(plugin.name)) {
+          throw new DlogError(`Duplicate plugin name: ${plugin.name}`);
+        }
+        pluginNames.add(plugin.name);
+        plugins.push(plugin);
       }
-      if (pluginNames.has(plugin.name)) {
-        throw new DlogError(`Duplicate plugin name: ${plugin.name}`);
-      }
-      pluginNames.add(plugin.name);
-      plugins.push({
-        name: plugin.name,
-        protocol: plugin.protocol,
-        command: expandConfiguredPath(plugin.command, this.#environment),
-        arguments: plugin.arguments,
-      });
     }
 
     const rules: ProcessingRule[] = [];
     const prefixKeys = new Set<string>();
     const globalKeys = new Set<string>();
-    for (const rule of this.#rules) {
-      if (!rule.enabled) {
-        continue;
+    for (const file of ruleFiles) {
+      for (const rule of file.rules) {
+        const converted = convertRule(rule);
+        const keySet =
+          converted.rule.phase === "prefix" ? prefixKeys : globalKeys;
+        if (keySet.has(converted.uniquenessKey)) {
+          throw new DlogError(
+            `Duplicate ${converted.rule.phase} substitution key: ${converted.displayKey}`,
+          );
+        }
+        if (
+          converted.rule.replacement.kind === "callback" &&
+          !pluginNames.has(converted.rule.replacement.plugin)
+        ) {
+          throw new DlogError(
+            `Rule references unknown plugin: ${converted.rule.replacement.plugin}`,
+          );
+        }
+        keySet.add(converted.uniquenessKey);
+        rules.push(converted.rule);
       }
-      const converted = convertRule(rule);
-      const keySet =
-        converted.rule.phase === "prefix" ? prefixKeys : globalKeys;
-      if (keySet.has(converted.uniquenessKey)) {
-        throw new DlogError(
-          `Duplicate ${converted.rule.phase} substitution key: ${converted.displayKey}`,
-        );
-      }
-      if (
-        converted.rule.replacement.kind === "callback" &&
-        !pluginNames.has(converted.rule.replacement.plugin)
-      ) {
-        throw new DlogError(
-          `Rule references unknown plugin: ${converted.rule.replacement.plugin}`,
-        );
-      }
-      keySet.add(converted.uniquenessKey);
-      rules.push(converted.rule);
     }
 
-    return { rules, plugins };
+    return { rules, plugins, ruleFiles };
+  }
+
+  #convertPlugin(plugin: ParsedPlugin): ExternalPluginDefinition {
+    return {
+      name: plugin.name,
+      protocol: plugin.protocol,
+      command: expandConfiguredPath(plugin.command, this.#environment),
+      arguments: plugin.arguments,
+    };
   }
 
   async #loadFile(path: string): Promise<void> {
@@ -413,9 +433,14 @@ class RuleFileCollector {
           await this.loadPath(include.path);
         }
       }
-      this.#plugins.push(...parsed.plugins);
-      this.#rules.push(...parsed.rules);
     }
+    this.#files.push({
+      sourcePath: path,
+      plugins: parsed.enabled
+        ? parsed.plugins.filter((plugin) => plugin.enabled)
+        : [],
+      rules: parsed.enabled ? parsed.rules.filter((rule) => rule.enabled) : [],
+    });
     this.#activeFiles.delete(canonicalPath);
     this.#loadedFiles.add(canonicalPath);
   }
@@ -427,7 +452,7 @@ interface ConvertedRule {
   readonly displayKey: string;
 }
 
-function convertRule(rule: ParsedRule): ConvertedRule {
+function convertRule(rule: ConfiguredRule): ConvertedRule {
   switch (rule.kind) {
     case "prefix": {
       const value = rule.replace.endsWith(" ")

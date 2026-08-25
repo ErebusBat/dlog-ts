@@ -33,6 +33,12 @@ import {
   parseThemeOptions,
   type ThemeCommandDependencies,
 } from "./theme-command.js";
+import {
+  parseRulesOptions,
+  RULES_HELP,
+  RulesCommand,
+  type RulesCommandDependencies,
+} from "./rules-command.js";
 import { ThemeLoader, type ThemeProvider } from "./theme.js";
 
 const ROOT_HELP = `Usage:
@@ -40,6 +46,7 @@ const ROOT_HELP = `Usage:
   dlog fixup [OPTIONS]
   dlog tail [OPTIONS] [DATE]
   dlog theme [OPTIONS]
+  dlog rules [COMMAND]
   dlog-append [--no-write] [--] [WORDS...]
   dlog-fixup [OPTIONS]
   dlog-tail [OPTIONS] [DATE]
@@ -93,7 +100,6 @@ Options:
   -h, --help                     Show this help
 `;
 
-
 export interface CliDependencies {
   readonly io: CommandIO;
   readonly configurationLoader: ConfigurationLoader;
@@ -144,10 +150,13 @@ export async function runCli(
     if (command === "theme") {
       return await runTheme(arguments_.slice(1), dependencies);
     }
+    if (command === "rules") {
+      return await runRules(arguments_.slice(1), dependencies);
+    }
 
     dependencies.io.writeError(
       command === undefined
-        ? `dlog: an explicit append, fixup, tail, or theme subcommand is required\n${ROOT_HELP}`
+        ? `dlog: an explicit append, fixup, tail, theme, or rules subcommand is required\n${ROOT_HELP}`
         : `dlog: unknown subcommand: ${command}\n${ROOT_HELP}`,
     );
     return 1;
@@ -299,6 +308,23 @@ async function runTheme(
     environment: dependencies.environment,
   };
   return new ThemeCommand(commandDependencies).run(parsed);
+}
+
+async function runRules(
+  arguments_: readonly string[],
+  dependencies: CliDependencies,
+): Promise<number> {
+  const parsed = parseRulesOptions(arguments_);
+  if (parsed === "help") {
+    dependencies.io.writeOutput(RULES_HELP);
+    return 0;
+  }
+  const commandDependencies: RulesCommandDependencies = {
+    io: dependencies.io,
+    configurationLoader: dependencies.configurationLoader,
+    environment: dependencies.environment,
+  };
+  return new RulesCommand(commandDependencies).run(parsed);
 }
 
 export function parseFixupOptions(

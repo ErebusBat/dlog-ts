@@ -29,6 +29,33 @@ dist/<os>-<arch>/dlog-tail -> dlog
 `just compile-all` builds the supported macOS ARM64 and Linux x64 targets.
 Builds never install into `~/bin`.
 
+## Docker deployment
+
+The production image contains a compiled musl executable on Alpine and runs
+`dlog fixup --watch` by default. The bundled Compose deployment bind-mounts the
+existing configuration directory read-only and the existing vault read-write:
+
+```text
+~/.config/dlog                  -> /config
+~/Documents/Obsidian/vimwiki    -> /vault
+```
+
+The container uses `/config/config.toml` and defaults to the host's
+`America/Denver` time zone. Override `TZ` when deploying in another time zone.
+
+```bash
+docker compose up --detach --build
+docker compose logs --follow dlog
+docker compose down
+```
+
+Compose arguments override the default watch command while retaining the
+compiled `dlog` entrypoint. For example:
+
+```bash
+docker compose run --rm dlog tail --color=never
+```
+
 ## Commands
 
 `dlog` is a strict dispatcher:
@@ -303,5 +330,5 @@ It deliberately differs from the Ruby-compatible profile in three places:
 - external commands receive explicit argv arrays and never run through a
   shell.
 
-The bundled Spotify helper, container image, direct clipboard API, and legacy
-configuration adapter are outside this implementation's scope.
+The bundled Spotify helper, direct clipboard API, legacy Ruby watcher image,
+and legacy configuration adapter are outside this implementation's scope.

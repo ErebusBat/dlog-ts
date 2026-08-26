@@ -1,0 +1,17 @@
+services:
+  dlog:
+    build:
+      context: .
+    environment:
+      DLOG_CONFIG: /config/config.toml
+      TZ: ${TZ:-America/Denver}
+    volumes:
+      - type: bind
+        source: ${HOME}/.config/dlog
+        target: /config
+        read_only: true
+      - type: bind
+        source: ${HOME}/Documents/Obsidian/vimwiki
+        target: /vault
+    init: true
+    restart: unless-stopped

@@ -21,10 +21,11 @@ It does **not** need to accept the current executable configuration-file syntax.
 
 ### TypeScript implementation profile
 
-This repository implements scope items 1 through 5. It does not bundle the
-optional Spotify helper, container image, direct clipboard integration, or a
-legacy Ruby configuration adapter. Existing standalone helpers remain usable
-through executable plugins.
+This repository implements scope items 1 through 5 and bundles a TypeScript
+production container for the compiled CLI. It does not bundle the optional
+Spotify helper, the legacy Ruby watcher image, direct clipboard integration,
+or a legacy Ruby configuration adapter. Existing standalone helpers remain
+usable through executable plugins.
 
 The implementation uses versioned TOML configuration, strftime templates for
 daily paths and entry prefixes, and explicit executable argument arrays. These
@@ -571,14 +572,27 @@ The supplied helper is an optional standalone executable suitable for a dynamic 
 
 The helper prints progress during initial authorization in addition to its final result. A caller that needs only one replacement string must account for that behavior.
 
-### Container image (not bundled by this implementation)
+### Container image
 
-The supplied container is a watch-mode deployment, not an append-command image:
+The TypeScript production image compiles the application as a standalone musl
+executable and runs it on Alpine. Its entrypoint is `dlog`, and its default
+arguments are `fixup --watch`; callers can replace those arguments to run any
+other subcommand.
 
-- It includes the application and an unrelated companion executable named `markdown-tool` built from its separate upstream repository.
-- Its entrypoint runs the fixup command with `--watch`, `--log-no-change "$DLOG_NO_CHANGE"`, `--sleep "$DLOG_SLEEP"`, `--delay "$DLOG_DELAY"`, and unparsed extra arguments from `DLOG_EXTRA_ARGS`.
-- Image defaults are `DLOG_SLEEP=5`, `DLOG_DELAY=30`, `DLOG_NO_CHANGE=60`, `DLOG_EXTRA_ARGS=--cache-config`, and `DLOG_CONFIG=/config/vault.rb`.
-- A deployment must mount a configuration file at `/config/vault.rb` and make the configured vault path available at the same path seen by that configuration.
+The bundled Compose deployment:
+
+- mounts the existing configuration directory read-only at `/config` and sets
+  `DLOG_CONFIG=/config/config.toml`;
+- mounts the existing vault read-write at `/vault`, which is one of the
+  configured `vault_roots`;
+- supplies the deployment time zone through `TZ`, because document selection
+  and entry timestamps use container-local time; and
+- restarts the watch process unless it is explicitly stopped.
+
+The legacy container behavior from the Ruby implementation is not reproduced.
+That image bundled an unrelated `markdown-tool`, used Ruby configuration at
+`/config/vault.rb`, and assembled watch arguments from environment variables.
+Those mechanics are not part of the TypeScript container contract.
 
 A desktop launcher integration simply forwards one text argument to the append command. The supplied local wrapper activates a runtime manager when present, changes to the installed application directory, and forwards all arguments.
 

@@ -1,0 +1,9 @@
+.git
+.agents
+node_modules
+dist
+coverage
+.env*
+*.log
+*.tgz
+.DS_Store

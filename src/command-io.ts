@@ -33,12 +33,16 @@ export class ProcessCommandIO implements CommandIO {
     let disposeSubscription: () => void = () => {};
     const onData = (chunk: Buffer | string): void => {
       for (const keypress of decoder.write(chunk)) {
+        // First we handle global keypresses that take precedence over any other keypresses. 
+
         // Raw mode delivers Ctrl-C as \u0003; restore state before SIGINT.
-        if (keypress === "\u0003") {
+        if (keypress === "\u0003" || keypress === "q") {
           disposeSubscription();
           process.kill(process.pid, "SIGINT");
           return;
         }
+
+        // Dispatch the keypress to the listener.
         listener(keypress);
       }
     };

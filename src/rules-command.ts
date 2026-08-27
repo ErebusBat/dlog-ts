@@ -3,7 +3,7 @@ import { sep } from "node:path";
 
 import { Ansis } from "ansis";
 
-import type { CommandIO } from "./append-command.js";
+import type { CommandIO } from "./command-io.js";
 import type {
   ConfiguredRule,
   ConfigurationLoader,

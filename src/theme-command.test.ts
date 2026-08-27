@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import type { CommandIO } from "./append-command.js";
+import type { CommandIO } from "./command-io.js";
 import {
   ConfigurationLoader,
   type ConfigurationEnvironment,

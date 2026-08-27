@@ -1,4 +1,4 @@
-import type { CommandIO } from "./append-command.js";
+import type { CommandIO } from "./command-io.js";
 import { DlogError } from "./dlog-error.js";
 import { renderDailyLog } from "./tail-command.js";
 import {

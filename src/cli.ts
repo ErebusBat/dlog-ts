@@ -1,10 +1,7 @@
 import { basename } from "node:path";
 
-import {
-  AppendCommand,
-  ProcessCommandIO,
-  type CommandIO,
-} from "./append-command.js";
+import { AppendCommand } from "./append-command.js";
+import { ProcessCommandIO, type CommandIO } from "./command-io.js";
 import {
   ConfigurationLoader,
   defaultConfigurationEnvironment,

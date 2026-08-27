@@ -1,7 +1,6 @@
 import { Ansis } from "ansis";
-import { createInterface } from "node:readline";
-import { StringDecoder } from "node:string_decoder";
 
+import type { CommandIO } from "./command-io.js";
 import { resolveColorLevel } from "./theme.js";
 import {
   ConfigurationLoader,
@@ -23,15 +22,6 @@ function colorizeNoWriteWarning(
 ): string {
   const level = resolveColorLevel("auto", outputIsTerminal, environment);
   return level === 0 ? text : new Ansis(level).yellow(text);
-}
-
-export interface CommandIO {
-  writeOutput(value: string): void;
-  writeError(value: string): void;
-  readLine(): Promise<string>;
-  isOutputTerminal(): boolean;
-  outputColumns(): number | undefined;
-  subscribeToKeypresses(listener: (keypress: string) => void): () => void;
 }
 
 export interface AppendCommandDependencies {
@@ -104,80 +94,5 @@ export class AppendCommand {
       configuration.rules,
       new PluginExecutor(configuration.plugins, tools),
     );
-  }
-}
-
-export class ProcessCommandIO implements CommandIO {
-  public isOutputTerminal(): boolean {
-    return process.stdout.isTTY === true;
-  }
-  public outputColumns(): number | undefined {
-    return process.stdout.isTTY === true ? process.stdout.columns : undefined;
-  }
-
-  public subscribeToKeypresses(
-    listener: (keypress: string) => void,
-  ): () => void {
-    if (process.stdin.isTTY !== true || process.stdout.isTTY !== true) {
-      return () => {};
-    }
-
-    const wasPaused = process.stdin.isPaused();
-    const wasRaw = process.stdin.isRaw === true;
-    const decoder = new StringDecoder("utf8");
-    let disposed = false;
-    let disposeSubscription: () => void = () => { };
-    const onData = (chunk: Buffer | string): void => {
-      for (const keypress of decoder.write(chunk)) {
-        // u0003 is the control character for SIGINT (Ctrl+C). 
-        // We need to handle it specially because if we don't, the process will terminate before we can clean up the terminal state.
-        if (keypress === "\u0003") {
-          // Restore terminal state before SIGINT can terminate the process.
-          disposeSubscription();
-          process.kill(process.pid, "SIGINT");
-          return;
-        }
-        listener(keypress);
-      }
-    };
-
-    process.stdin.on("data", onData);
-    if (!wasRaw) {
-      process.stdin.setRawMode(true);
-    }
-    process.stdin.resume();
-
-    disposeSubscription = (): void => {
-      if (disposed) {
-        return;
-      }
-      disposed = true;
-      process.stdin.off("data", onData);
-      if (!wasRaw) {
-        process.stdin.setRawMode(false);
-      }
-      if (wasPaused) {
-        process.stdin.pause();
-      }
-    };
-    return disposeSubscription;
-
-  }
-
-  public writeOutput(value: string): void {
-    process.stdout.write(value);
-  }
-
-  public writeError(value: string): void {
-    process.stderr.write(value);
-  }
-
-  public async readLine(): Promise<string> {
-    const lines = createInterface({ input: process.stdin, terminal: false });
-    for await (const line of lines) {
-      lines.close();
-      return line;
-    }
-    return "";
   }
 }

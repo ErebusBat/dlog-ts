@@ -140,6 +140,7 @@ The renderer assigns semantic roles independently of Markdown delimiters:
 | `message`         | Ordinary entry text.                                   |
 | `strong`          | Display text from `**text**`.                          |
 | `emphasis`        | Display text from `*text*` or `_text_`.                |
+| `inline_code`     | Display text from `` `text` ``.                        |
 | `wiki_link`       | Display text from `[[page]]` or `[[page\|display]]`.   |
 | `external_link`   | Display text from `[text](url)`; the URL is not shown. |
 
@@ -149,10 +150,11 @@ A canonical timed entry is an unordered marker followed by whitespace,
 rest of the line is not canonical. Only the marker and separator characters,
 not surrounding whitespace, receive their respective roles.
 
-Parsing precedence is links first, then bold, then italic. Unmatched or
-unterminated markers render literally. Markup inside link display text is not
-further parsed. Inline roles compose with `message`: modifiers accumulate and
-an inline foreground or background replaces the message color.
+Parsing precedence is links first, then inline code, bold, then italic.
+Unmatched or unterminated markers render literally. Markup inside link display
+text and inline code is not further parsed. Inline roles compose with `message`:
+modifiers accumulate and an inline foreground or background replaces the
+message color.
 
 #### Color policy
 
@@ -267,11 +269,13 @@ canonical `bright_black` through `bright_white`, or exactly `#RRGGBB`
 `strikethrough`. `reset` clears composed parent styling before applying the
 role. `visible` cancels inherited `hidden`; a resolved role cannot enable both.
 
-The built-in theme uses bright-black date and separator, bold cyan heading,
-magenta list marker, italic yellow timestamp, terminal-default message, bold
-strong text, italic emphasis, underlined blue wiki links, and underlined cyan
-external links. Backgrounds use the terminal default and all other modifiers
-are false.
+The built-in theme uses bright-black dates and entry separators, bold cyan
+headings, magenta list markers, italic yellow timestamps, bold strong text,
+italic emphasis, inverse inline code, underlined blue wiki links, and underlined
+cyan external links. Inverse inline code uses the terminal's default foreground
+and background colors in opposite positions, producing an adaptive contrasting
+background in both light and dark terminals. Explicit backgrounds otherwise use
+the terminal default and all other modifiers are false.
 
 ### Rules command
 

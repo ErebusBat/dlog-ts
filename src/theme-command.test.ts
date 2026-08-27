@@ -296,8 +296,10 @@ entry_prefix = "- *%H:%M* - "
     const dumped = dumpTheme(loaded.theme);
 
     expect(dumped).toStartWith('schema = "dlog-theme/v1"\n');
-    expect(dumped.match(/inherit = false/g)).toHaveLength(10);
+    expect(dumped.match(/inherit = false/g)).toHaveLength(11);
     expect(dumped).toContain("[roles.external_link]");
+    expect(dumped).toContain("[roles.inline_code]");
+    expect(dumped).toContain("inverse = true");
     expect(dumped).toContain('fg = "cyan"');
     expect(dumped).toContain("strikethrough = false");
   });
@@ -321,7 +323,7 @@ describe("theme command", () => {
     expect(fixture.io.error).toBe("Theme: built-in default\n");
     expect(fixture.io.output).toContain("2025-07-25-Fri\nLog\n");
     expect(fixture.io.output).toContain(
-      "- 09:42 - Plain strong emphasis wiki link external link\n",
+      "- 09:42 - Plain strong emphasis inline code wiki link external link\n",
     );
   });
 

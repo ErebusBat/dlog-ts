@@ -80,13 +80,13 @@ export class TailCommand {
         colorLevel === 0
           ? undefined
           : new ThemeStyler(
-            (
-              await this.#dependencies.themeLoader.loadForConfiguration(
-                configuration,
-              )
-            ).theme,
-            colorLevel,
-          );
+              (
+                await this.#dependencies.themeLoader.loadForConfiguration(
+                  configuration,
+                )
+              ).theme,
+              colorLevel,
+            );
       return {
         configuration,
         truncate,
@@ -570,7 +570,7 @@ function renderInlineMarkup(text: string, styler?: ThemeStyler): string {
   let cursor = 0;
   for (const match of text.matchAll(LINK_PATTERN)) {
     const index = match.index;
-    output += renderEmphasis(text.slice(cursor, index), styler);
+    output += renderCodeAndEmphasis(text.slice(cursor, index), styler);
     const display =
       match.groups?.["display"] ??
       match.groups?.["page"] ??
@@ -581,6 +581,20 @@ function renderInlineMarkup(text: string, styler?: ThemeStyler): string {
       match.groups?.["url"] === undefined ? "wiki_link" : "external_link";
     output += styler?.apply(role, display, "message") ?? display;
     cursor = index + match[0].length;
+  }
+  output += renderCodeAndEmphasis(text.slice(cursor), styler);
+  return output;
+}
+
+function renderCodeAndEmphasis(text: string, styler?: ThemeStyler): string {
+  const pattern = /`([^`]+)`/g;
+  let output = "";
+  let cursor = 0;
+  for (const match of text.matchAll(pattern)) {
+    output += renderEmphasis(text.slice(cursor, match.index), styler);
+    const content = match[1]!;
+    output += styler?.apply("inline_code", content, "message") ?? content;
+    cursor = match.index + match[0].length;
   }
   output += renderEmphasis(text.slice(cursor), styler);
   return output;

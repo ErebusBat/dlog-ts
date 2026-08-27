@@ -24,6 +24,7 @@ export const THEME_ROLES = [
   "message",
   "strong",
   "emphasis",
+  "inline_code",
   "wiki_link",
   "external_link",
 ] as const;
@@ -128,6 +129,7 @@ const roleSchemas = {
   message: roleStyleSchema.optional(),
   strong: roleStyleSchema.optional(),
   emphasis: roleStyleSchema.optional(),
+  inline_code: roleStyleSchema.optional(),
   wiki_link: roleStyleSchema.optional(),
   external_link: roleStyleSchema.optional(),
 };
@@ -164,6 +166,7 @@ export const BUILT_IN_THEME: Theme = {
   message: EMPTY_STYLE,
   strong: { ...EMPTY_STYLE, bold: true },
   emphasis: { ...EMPTY_STYLE, italic: true },
+  inline_code: { ...EMPTY_STYLE, inverse: true },
   wiki_link: { ...EMPTY_STYLE, fg: "blue", underline: true },
   external_link: { ...EMPTY_STYLE, fg: "cyan", underline: true },
 };
@@ -378,6 +381,10 @@ function resolveTheme(parsed: ParsedThemeFile): Theme {
     message: resolveRoleStyle(BUILT_IN_THEME.message, parsed.roles.message),
     strong: resolveRoleStyle(BUILT_IN_THEME.strong, parsed.roles.strong),
     emphasis: resolveRoleStyle(BUILT_IN_THEME.emphasis, parsed.roles.emphasis),
+    inline_code: resolveRoleStyle(
+      BUILT_IN_THEME.inline_code,
+      parsed.roles.inline_code,
+    ),
     wiki_link: resolveRoleStyle(
       BUILT_IN_THEME.wiki_link,
       parsed.roles.wiki_link,

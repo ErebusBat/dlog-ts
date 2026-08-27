@@ -361,6 +361,22 @@ describe("tail CLI conformance", () => {
     );
   });
 
+  test("TAIL-32 renders inline code without backticks on an adaptive background", async () => {
+    const fixture = await tailFixture(
+      "# Log\n\n- *12:30* - Ran `dlog tail`; keep `unfinished\n",
+    );
+    const status = await runCli(
+      "dlog",
+      ["tail", "--color=always"],
+      fixture.dependencies,
+    );
+
+    expect(status).toBe(0);
+    expect(fixture.io.output).toBe(
+      `${STYLED_DATE_HEADING}${STYLED_HEADING}${STYLED_MARKER} ${styledTime("12:30")} ${STYLED_SEPARATOR} Ran ${ESC}7mdlog tail${ESC}27m; keep \`unfinished${ESC}0m\n`,
+    );
+  });
+
   test("TAIL-05 auto, NO_COLOR, and never produce plain output; always overrides", async () => {
     const source = "# Log\n\n- *09:00* - [[Page]]\n";
     const plain = `${DATE_HEADING}Log\n- 09:00 - Page\n`;
@@ -797,10 +813,7 @@ describe("tail truncation conformance", () => {
       "2025-07-25-Fri\nLog\n- 09:00 - Coffee an…\n",
     );
 
-    const cliWidth = await tailFixture(
-      LONG_DOCUMENT,
-      "[tail]\nwidth = 20\n",
-    );
+    const cliWidth = await tailFixture(LONG_DOCUMENT, "[tail]\nwidth = 20\n");
     expect(
       await runCli(
         "dlog",
@@ -827,7 +840,13 @@ describe("tail truncation conformance", () => {
 
     const columns = await tailFixture(LONG_DOCUMENT);
     columns.environment["COLUMNS"] = "20";
-    expect(await runCli("dlog", ["tail", "--color=never", "-t"], columns.dependencies)).toBe(0);
+    expect(
+      await runCli(
+        "dlog",
+        ["tail", "--color=never", "-t"],
+        columns.dependencies,
+      ),
+    ).toBe(0);
     expect(columns.io.output).toBe(
       "2025-07-25-Fri\nLog\n- 09:00 - Coffee an…\n",
     );
@@ -914,7 +933,11 @@ describe("tail truncation conformance", () => {
     const fixture = await tailFixture(
       "# Log\n\n- *09:00* - 日本語テスト\n- *10:00* -\tTabbed\n",
     );
-    await runCli("dlog", ["tail", "--color=never", "--width", "20"], fixture.dependencies);
+    await runCli(
+      "dlog",
+      ["tail", "--color=never", "--width", "20"],
+      fixture.dependencies,
+    );
     expect(fixture.io.output).toBe(
       "2025-07-25-Fri\nLog\n- 09:00 - 日本語テ…\n- 10:00 -\tTab…\n",
     );

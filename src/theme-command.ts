@@ -29,7 +29,7 @@ export interface ThemeCommandDependencies {
 
 const PREVIEW_DATE = "2025-07-25-Fri";
 const PREVIEW_LINES = [
-  "- *09:42* - Plain **strong** *emphasis* [[Daily Notes|wiki link]] [external link](https://example.com)",
+  "- *09:42* - Plain **strong** *emphasis* `inline code` [[Daily Notes|wiki link]] [external link](https://example.com)",
 ] as const;
 
 const SWATCH_SAMPLES: Readonly<Record<ThemeRole, string>> = {
@@ -41,6 +41,7 @@ const SWATCH_SAMPLES: Readonly<Record<ThemeRole, string>> = {
   message: "Plain message text",
   strong: "Strong text",
   emphasis: "Emphasized text",
+  inline_code: "Inline code",
   wiki_link: "Wiki link",
   external_link: "External link",
 };

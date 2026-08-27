@@ -40,6 +40,9 @@ class TestIO implements CommandIO {
   public input = "";
   public outputIsTerminal = false;
   public columns: number | undefined;
+  public keypressSubscriptions = 0;
+  public keypressDisposals = 0;
+  #keypressListener: ((keypress: string) => void) | undefined;
 
   public isOutputTerminal(): boolean {
     return this.outputIsTerminal;
@@ -59,6 +62,26 @@ class TestIO implements CommandIO {
 
   public async readLine(): Promise<string> {
     return this.input;
+  }
+
+  public subscribeToKeypresses(
+    listener: (keypress: string) => void,
+  ): () => void {
+    this.keypressSubscriptions += 1;
+    this.#keypressListener = listener;
+    let disposed = false;
+    return (): void => {
+      if (disposed) {
+        return;
+      }
+      disposed = true;
+      this.keypressDisposals += 1;
+      this.#keypressListener = undefined;
+    };
+  }
+
+  public emitKeypress(keypress: string): void {
+    this.#keypressListener?.(keypress);
   }
 }
 
@@ -226,6 +249,7 @@ ${tailConfig}`,
     configurationLoader,
     environment: configEnvironment,
   });
+
   return {
     documentPath,
     io,
@@ -248,6 +272,21 @@ ${tailConfig}`,
       environment,
     },
   };
+}
+async function replaceTailConfiguration(
+  fixture: TailFixture,
+  dailyPath: string,
+  tailConfig = "",
+): Promise<void> {
+  await writeFile(
+    fixture.environment["DLOG_CONFIG"]!,
+    `schema = "dlog-config/v1"
+vault_roots = [${JSON.stringify(dirname(fixture.documentPath))}]
+daily_path = ${JSON.stringify(dailyPath)}
+entry_prefix = "- *%H:%M* - "
+${tailConfig}`,
+    "utf8",
+  );
 }
 
 const ESC = "\x1b[";
@@ -521,6 +560,117 @@ describe("tail follow conformance", () => {
     );
     expect(fixture.io.error).toBe("");
   });
+  test("TAIL-31 reloads on lowercase r without a document change", async () => {
+    const clock = new ScriptedClock(NOW);
+    let remainingPolls = 1;
+    const fixture = await datedTailFixture(
+      { "2025-07-25.md": datedDocument("Initial") },
+      NOW,
+      clock,
+      () => remainingPolls-- > 0,
+    );
+    clock.sleepActions.push(() => {
+      fixture.io.emitKeypress("x");
+      fixture.io.emitKeypress("r");
+    });
+
+    const status = await runCli(
+      "dlog",
+      ["tail", "--follow", "--color=never"],
+      fixture.dependencies,
+    );
+
+    const clear = "\x1b[2J\x1b[H";
+    expect(status).toBe(0);
+    expect(clock.sleeps).toEqual([1]);
+    expect(fixture.io.output.match(/\x1b\[2J\x1b\[H/g)).toHaveLength(2);
+    expect(fixture.io.output).toBe(
+      `${clear}2025-07-25-Fri\nLog\n- 09:00 - Initial\n` +
+        `${clear}2025-07-25-Fri\nLog\n- 09:00 - Initial\n`,
+    );
+    expect(fixture.io.keypressSubscriptions).toBe(1);
+    expect(fixture.io.keypressDisposals).toBe(1);
+  });
+
+  test("TAIL-31 reloads config-derived truncation settings", async () => {
+    const clock = new ScriptedClock(NOW);
+    let remainingPolls = 1;
+    const fixture = await datedTailFixture(
+      {
+        "2025-07-25.md": datedDocument(
+          "Coffee and a very long conversation about things",
+        ),
+      },
+      NOW,
+      clock,
+      () => remainingPolls-- > 0,
+      "[tail]\ntruncate = true\nwidth = 20\n",
+    );
+    clock.sleepActions.push(async () => {
+      await replaceTailConfiguration(
+        fixture,
+        "%Y-%m-%d.md",
+        "[tail]\ntruncate = true\nwidth = 10\n",
+      );
+      fixture.io.emitKeypress("r");
+    });
+
+    const status = await runCli(
+      "dlog",
+      ["tail", "--follow", "--color=never"],
+      fixture.dependencies,
+    );
+
+    const displays = fixture.io.output
+      .split("\x1b[2J\x1b[H")
+      .filter((display) => display.length > 0);
+    expect(status).toBe(0);
+    expect(displays).toHaveLength(2);
+    expect(displays[0]).toContain("2025-07-25-Fri");
+    expect(displays[0]).toContain("- 09:00 - Coffee an…");
+    expect(displays[1]).toContain("2025-07-2…");
+    expect(displays[1]).toContain("- 09:00 -…");
+    expect(displays[0]).not.toBe(displays[1]);
+    expect(fixture.io.keypressDisposals).toBe(1);
+  });
+
+  test("TAIL-31 keeps the old display for a missing reloaded path", async () => {
+    const clock = new ScriptedClock(NOW);
+    let remainingPolls = 2;
+    const fixture = await datedTailFixture(
+      { "2025-07-25.md": datedDocument("Initial") },
+      NOW,
+      clock,
+      () => remainingPolls-- > 0,
+    );
+    let outputWhileReplacementIsMissing = "";
+    const replacementPath = join(dirname(fixture.documentPath), "alternate.md");
+    clock.sleepActions.push(
+      async () => {
+        await replaceTailConfiguration(fixture, "alternate.md");
+        fixture.io.emitKeypress("r");
+      },
+      async () => {
+        outputWhileReplacementIsMissing = fixture.io.output;
+        await writeFile(replacementPath, datedDocument("Alternate"), "utf8");
+      },
+    );
+
+    const status = await runCli(
+      "dlog",
+      ["tail", "--follow", "--color=never"],
+      fixture.dependencies,
+    );
+
+    const initialDisplay =
+      "\x1b[2J\x1b[H2025-07-25-Fri\nLog\n- 09:00 - Initial\n";
+    expect(status).toBe(0);
+    expect(outputWhileReplacementIsMissing).toBe(initialDisplay);
+    expect(fixture.io.output).toBe(
+      `${initialDisplay}\x1b[2J\x1b[H2025-07-25-Fri\nLog\n- 09:00 - Alternate\n`,
+    );
+    expect(fixture.io.keypressDisposals).toBe(1);
+  });
 });
 
 describe("tail truncation conformance", () => {
@@ -677,9 +827,7 @@ describe("tail truncation conformance", () => {
 
     const columns = await tailFixture(LONG_DOCUMENT);
     columns.environment["COLUMNS"] = "20";
-    expect(
-      await runCli("dlog", ["tail", "--color=never", "-t"], columns.dependencies),
-    ).toBe(0);
+    expect(await runCli("dlog", ["tail", "--color=never", "-t"], columns.dependencies)).toBe(0);
     expect(columns.io.output).toBe(
       "2025-07-25-Fri\nLog\n- 09:00 - Coffee an…\n",
     );

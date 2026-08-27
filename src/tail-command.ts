@@ -2,6 +2,7 @@ import type { CommandIO } from "./append-command.js";
 import {
   dailyDocumentPath,
   type ConfigurationLoader,
+  type LoadedConfiguration,
 } from "./configuration.js";
 import type { DailyDocumentReader } from "./daily-document.js";
 import { DlogError } from "./dlog-error.js";
@@ -18,6 +19,13 @@ export type TailColorMode = ColorMode;
 
 const CLEAR_SCREEN = "\x1b[2J\x1b[H";
 const WATCH_POLL_INTERVAL_SECONDS = 1;
+
+interface TailRenderState {
+  readonly configuration: LoadedConfiguration;
+  readonly truncate: boolean;
+  readonly fixedWidth?: number;
+  readonly styler?: ThemeStyler;
+}
 
 export interface TailOptions {
   readonly color: TailColorMode;
@@ -50,33 +58,28 @@ export class TailCommand {
   }
 
   public async run(options: TailOptions): Promise<number> {
-    const configuration = await this.#dependencies.configurationLoader.load();
-    const truncate = options.truncate ?? configuration.tail.truncate;
-    const fixedWidth = options.width ?? configuration.tail.width;
-    const measureWidth = (): number | undefined =>
+    const measureWidth = (fixedWidth: number | undefined): number | undefined =>
       fixedWidth ??
       this.#dependencies.io.outputColumns() ??
       environmentColumns(this.#dependencies.environment);
-    if (options.truncate === true && measureWidth() === undefined) {
-      throw new DlogError(
-        "Option --truncate requires a measurable width; pass --width COLUMNS",
+    const loadRenderState = async (): Promise<TailRenderState> => {
+      const configuration = await this.#dependencies.configurationLoader.load();
+      const truncate = options.truncate ?? configuration.tail.truncate;
+      const fixedWidth = options.width ?? configuration.tail.width;
+      if (options.truncate === true && measureWidth(fixedWidth) === undefined) {
+        throw new DlogError(
+          "Option --truncate requires a measurable width; pass --width COLUMNS",
+        );
+      }
+      const colorLevel = resolveColorLevel(
+        options.color,
+        this.#dependencies.io.isOutputTerminal(),
+        this.#dependencies.environment,
       );
-    }
-    const truncateWidth = (): number | undefined =>
-      truncate ? measureWidth() : undefined;
-    const initialDay = selectTailDate(options, this.#dependencies.clock.now());
-    const initialPath = dailyDocumentPath(configuration, initialDay);
-    const initialLines =
-      await this.#dependencies.documentReader.readLogSection(initialPath);
-    const colorLevel = resolveColorLevel(
-      options.color,
-      this.#dependencies.io.isOutputTerminal(),
-      this.#dependencies.environment,
-    );
-    const styler =
-      colorLevel === 0
-        ? undefined
-        : new ThemeStyler(
+      const styler =
+        colorLevel === 0
+          ? undefined
+          : new ThemeStyler(
             (
               await this.#dependencies.themeLoader.loadForConfiguration(
                 configuration,
@@ -84,12 +87,29 @@ export class TailCommand {
             ).theme,
             colorLevel,
           );
+      return {
+        configuration,
+        truncate,
+        ...(fixedWidth === undefined ? {} : { fixedWidth }),
+        ...(styler === undefined ? {} : { styler }),
+      };
+    };
+    let renderState = await loadRenderState();
+    const truncateWidth = (state: TailRenderState): number | undefined =>
+      state.truncate ? measureWidth(state.fixedWidth) : undefined;
+    const initialDay = selectTailDate(options, this.#dependencies.clock.now());
+    const initialPath = dailyDocumentPath(
+      renderState.configuration,
+      initialDay,
+    );
+    const initialLines =
+      await this.#dependencies.documentReader.readLogSection(initialPath);
     this.#dependencies.io.writeOutput(
       `${options.follow ? CLEAR_SCREEN : ""}${renderDailyLog(
         formatTailDate(initialDay),
         initialLines,
-        styler,
-        truncateWidth(),
+        renderState.styler,
+        truncateWidth(renderState),
       )}`,
     );
     if (!options.follow) {
@@ -101,45 +121,68 @@ export class TailCommand {
     let displayedHash = await this.#hashIfPresent(displayedPath);
     const followsCurrentDay =
       options.date === undefined && !options.previousWeekday;
+    let reloadRequested = false;
+    const disposeKeypresses = this.#dependencies.io.subscribeToKeypresses(
+      (keypress) => {
+        if (keypress === "r") {
+          reloadRequested = true;
+        }
+      },
+    );
 
-    while (this.#dependencies.keepWatching()) {
-      await this.#dependencies.clock.sleep(WATCH_POLL_INTERVAL_SECONDS);
-      const candidateDay = followsCurrentDay
-        ? this.#dependencies.clock.now()
-        : displayedDay;
-      const candidatePath = dailyDocumentPath(configuration, candidateDay);
-      const candidateHash = await this.#hashIfPresent(candidatePath);
-      if (
-        candidateHash === undefined ||
-        (candidatePath === displayedPath &&
-          candidateHash === displayedHash &&
-          formatTailDate(candidateDay) === formatTailDate(displayedDay))
-      ) {
-        continue;
-      }
-
-      let candidateLines: readonly string[];
-      try {
-        candidateLines =
-          await this.#dependencies.documentReader.readLogSection(candidatePath);
-      } catch (error) {
-        if (isMissingFileError(error)) {
+    try {
+      while (this.#dependencies.keepWatching()) {
+        await this.#dependencies.clock.sleep(WATCH_POLL_INTERVAL_SECONDS);
+        const shouldReload = reloadRequested;
+        reloadRequested = false;
+        if (shouldReload) {
+          renderState = await loadRenderState();
+        }
+        const candidateDay = followsCurrentDay
+          ? this.#dependencies.clock.now()
+          : displayedDay;
+        const candidatePath = dailyDocumentPath(
+          renderState.configuration,
+          candidateDay,
+        );
+        const candidateHash = await this.#hashIfPresent(candidatePath);
+        if (
+          candidateHash === undefined ||
+          (!shouldReload &&
+            candidatePath === displayedPath &&
+            candidateHash === displayedHash &&
+            formatTailDate(candidateDay) === formatTailDate(displayedDay))
+        ) {
           continue;
         }
-        throw error;
-      }
 
-      this.#dependencies.io.writeOutput(
-        `${CLEAR_SCREEN}${renderDailyLog(
-          formatTailDate(candidateDay),
-          candidateLines,
-          styler,
-          truncateWidth(),
-        )}`,
-      );
-      displayedDay = candidateDay;
-      displayedPath = candidatePath;
-      displayedHash = candidateHash;
+        let candidateLines: readonly string[];
+        try {
+          candidateLines =
+            await this.#dependencies.documentReader.readLogSection(
+              candidatePath,
+            );
+        } catch (error) {
+          if (isMissingFileError(error)) {
+            continue;
+          }
+          throw error;
+        }
+
+        this.#dependencies.io.writeOutput(
+          `${CLEAR_SCREEN}${renderDailyLog(
+            formatTailDate(candidateDay),
+            candidateLines,
+            renderState.styler,
+            truncateWidth(renderState),
+          )}`,
+        );
+        displayedDay = candidateDay;
+        displayedPath = candidatePath;
+        displayedHash = candidateHash;
+      }
+    } finally {
+      disposeKeypresses();
     }
 
     return 0;

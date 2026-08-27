@@ -42,6 +42,11 @@ class TestIO implements CommandIO {
   public async readLine(): Promise<string> {
     return "";
   }
+  public subscribeToKeypresses(
+    _listener: (keypress: string) => void,
+  ): () => void {
+    return () => {};
+  }
 }
 
 interface RulesFixture {

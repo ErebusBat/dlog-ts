@@ -48,6 +48,11 @@ class TestIO implements CommandIO {
   public outputColumns(): number | undefined {
     return this.columns;
   }
+  public subscribeToKeypresses(
+    _listener: (keypress: string) => void,
+  ): () => void {
+    return () => {};
+  }
 }
 
 afterAll(async () => {

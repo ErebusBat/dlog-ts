@@ -55,6 +55,11 @@ class TestIO implements CommandIO {
   public async readLine(): Promise<string> {
     return this.input;
   }
+  public subscribeToKeypresses(
+    _listener: (keypress: string) => void,
+  ): () => void {
+    return () => {};
+  }
 }
 
 class FixedClock implements WatchClock {

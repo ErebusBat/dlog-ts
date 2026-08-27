@@ -282,6 +282,8 @@ document.
 | TAIL-29 | Run follow mode with `-f -t`; change output width between polls.                                              | Width is re-measured before each redraw unless `--width` fixed width was given, so subsequent renders can change truncation breadth.                                                                           |
 | TAIL-29b| Run `tail --width 25 -f`; change output width between polls.                                                  | Explicit width remains fixed across redraws and overrides terminal width changes.                                                                                                                          |
 | TAIL-30 | Run `tail --width 20` on lines containing tabs and wide glyphs (e.g., `日本語` and tabs).                    | Tabs and East Asian wide glyphs are measured, truncated only at display boundaries, and never split through a grapheme cluster.                                                                               |
+| TAIL-31 | Start interactive `tail --follow`, press a non-`r` key, then change a config- or theme-derived setting without changing the displayed document bytes and press lowercase `r`; also point `daily_path` at a missing replacement file. | Non-`r` keys do not redraw. The next poll after `r` emits a second clear-and-render using reloaded settings even with the same document hash. A missing replacement path retains the prior display without output or error until its document appears. |
+
 ### Tail date scenarios
 
 These cases use local time `2025-07-25 10:30:00` (a Friday), a strftime `daily_path` of `%Y-%m-%d.md`, and run `dlog tail` without forced color.

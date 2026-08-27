@@ -121,7 +121,8 @@ modifies the document.
 3. Write the selected date as `YYYY-MM-DD-Day`, where `Day` is the three-letter English weekday name. Write the rendered heading line next, then one rendered line per extracted section line, in document order. Every written line, including the last, ends with a newline.
 4. Without `-f` or `--follow`, exit with status `0` after the initial rendering.
 5. With `-f` or `--follow`, clear the terminal with `ESC[2JESC[H` before the initial rendering, then poll the complete selected file every second. When its bytes change, clear the terminal again and redraw the complete rendering. Continue until interrupted.
-6. A followed default-today selection follows the local calendar day. After midnight, resolve the new day's path on every poll. If that document does not yet exist, emit no output or error and retain the previous display. Switch and redraw only after the new document exists. Explicit date arguments and `-w` remain fixed to the day selected at startup.
+6. In interactive follow mode, read raw terminal keys without requiring Enter. A lowercase `r` reloads configuration and theme and forces a complete clear-and-redraw on the next poll, even when the selected document's bytes are unchanged. Other keys have no effect. Non-interactive and piped runs retain the ordinary polling behavior and do not install keyboard input handling.
+7. A followed default-today selection follows the local calendar day. After midnight, resolve the new day's path on every poll. If that document does not yet exist, emit no output or error and retain the previous display. Switch and redraw only after the new document exists. Explicit date arguments and `-w` remain fixed to the day selected at startup.
 
 Tail displays everything in the section. It does not apply the writer's standard-entry filter, sort, split, or duplicate removal; those are write-time normalizations, not display rules.
 
@@ -160,7 +161,7 @@ The command accepts these options:
 | Option           | Meaning                                                         | Default |
 | ---------------- | --------------------------------------------------------------- | ------- |
 | `-w`             | Select the previous weekday; excludes DATE.                      | Off     |
-| `-f`, `--follow` | Clear before drawing and redraw when the selected file changes.    | Off     |
+| `-f`, `--follow` | Clear before drawing and redraw when the selected file changes; interactive lowercase `r` reloads configuration and theme and forces a redraw. | Off     |
 | `-t`, `--truncate` | Truncate lines wider than the available display width.        | Off     |
 | `--no-truncate`  | Disable truncation.                                              | N/A     |
 | `--width COLUMNS` | Truncate at `COLUMNS` display columns (implies `--truncate`).   | N/A     |

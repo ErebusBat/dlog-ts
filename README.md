@@ -66,7 +66,7 @@ dlog append                 # prompts for one line
 dlog fixup                  # normalize once
 dlog fixup --watch          # continue watching
 dlog tail                   # print today's date and formatted # Log section
-dlog tail -f                # clear and redraw while following today's log
+dlog tail -f                # clear and redraw while following today's log; press lowercase r to reload
 dlog tail --color=never     # plain log formatting for piping
 dlog tail -w                # previous weekday (Monday selects Friday)
 dlog tail -1                # yesterday's section
@@ -145,7 +145,10 @@ of config.
 
 With `--follow`, a default-today tail follows the local date across midnight. If
 the new document does not exist yet, the prior display remains until the new
-document appears.
+document appears. In an interactive terminal, press lowercase `r` (without
+Enter) to reload configuration and theme and force a complete clear-and-redraw
+on the next poll; other keys have no effect. Piped runs do not install keyboard
+input handling.
 
 ## Application configuration
 

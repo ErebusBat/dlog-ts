@@ -10,6 +10,8 @@ import {
   type ConfigurationEnvironment,
 } from "./configuration.js";
 
+import { EntryProcessor } from "./entry-processor.js";
+
 const temporaryDirectories: string[] = [];
 
 afterAll(async () => {
@@ -335,7 +337,82 @@ entry_prefix = ""
       "utf8",
     );
     await expect(
-      new ConfigurationLoader({ environment: environment(root) }).load(primaryPath),
+      new ConfigurationLoader({ environment: environment(root) }).load(
+        primaryPath,
+      ),
     ).rejects.toThrow();
   });
+});
+
+describe("literal input lists", () => {
+  test("CFG-16 groups inputs while preserving sequential processing and callbacks", async () => {
+    const root = await testRoot();
+    const configPath = await writePrimary(root, ["rules.toml"]);
+    await writeFile(
+      join(root, "rules.toml"),
+      ruleFile(`
+[[rules]]
+kind = "prefix"
+match = ["M", "MERGE", "MERGED"]
+replace = "Merged"
+[[rules]]
+kind = "link"
+match = ["DARTP6", "DARTER"]
+page = "dartp6"
+[[rules]]
+kind = "global"
+match = ["A", "BB"]
+replace = "B"
+[[plugins]]
+name = "echo"
+protocol = "json"
+command = "echo"
+[[rules]]
+kind = "callback"
+match = ["X", "Y"]
+plugin = "echo"
+`),
+    );
+    const configuration = await new ConfigurationLoader({
+      environment: environment(root, { DLOG_CONFIG: configPath }),
+    }).load();
+    const processor = new EntryProcessor(configuration.rules, {
+      async execute(request) {
+        return { action: "replace", value: request.matchedText.toLowerCase() };
+      },
+    });
+    for (const prefix of ["M", "MERGE", "MERGED"]) {
+      const result = await processor.process(`${prefix} DARTP6 DARTER AA X Y`, {
+        now: new Date(2026, 8, 23, 10),
+      });
+      expect(result.entryText).toBe("Merged [[dartp6]] [[dartp6]] B x y");
+    }
+  });
+
+  test.each([
+    ["[]", "Invalid"],
+    ['["ok", ""]', "Invalid"],
+    ['["ok", 1]', "Invalid"],
+    ['["M", "M"]', "Duplicate prefix substitution key: M"],
+  ])(
+    "CFG-17 rejects invalid or duplicate input lists %s",
+    async (match, message) => {
+      const root = await testRoot();
+      const configPath = await writePrimary(root, ["rules.toml"]);
+      await writeFile(
+        join(root, "rules.toml"),
+        ruleFile(`
+[[rules]]
+kind = "prefix"
+match = ${match}
+replace = "Merged"
+`),
+      );
+      await expect(
+        new ConfigurationLoader({
+          environment: environment(root, { DLOG_CONFIG: configPath }),
+        }).load(),
+      ).rejects.toThrow(message);
+    },
+  );
 });

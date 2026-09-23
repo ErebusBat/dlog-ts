@@ -32,8 +32,13 @@ const pluginSchema = z.strictObject({
   enabled: z.boolean().default(true),
 });
 
+const literalMatchSchema = z.union([
+  z.string().min(1),
+  z.array(z.string().min(1)).min(1),
+]);
+
 const matchFields = {
-  match: z.string().min(1).optional(),
+  match: literalMatchSchema.optional(),
   pattern: z.string().min(1).optional(),
   matcher: z.literal("phone").optional(),
   flags: z
@@ -44,7 +49,7 @@ const matchFields = {
 
 const prefixRuleSchema = z.strictObject({
   kind: z.literal("prefix"),
-  match: z.string().min(1),
+  match: literalMatchSchema,
   replace: z.string(),
   enabled: z.boolean().default(true),
 });
@@ -61,7 +66,7 @@ const globalRuleSchema = z
 const linkRuleSchema = z
   .strictObject({
     kind: z.literal("link"),
-    match: z.string().min(1),
+    match: literalMatchSchema,
     page: z
       .string()
       .refine((page) => page.trim().length > 0, "Page cannot be blank"),
@@ -398,24 +403,25 @@ class RuleFileCollector {
     const globalKeys = new Set<string>();
     for (const file of ruleFiles) {
       for (const rule of file.rules) {
-        const converted = convertRule(rule);
-        const keySet =
-          converted.rule.phase === "prefix" ? prefixKeys : globalKeys;
-        if (keySet.has(converted.uniquenessKey)) {
-          throw new DlogError(
-            `Duplicate ${converted.rule.phase} substitution key: ${converted.displayKey}`,
-          );
+        for (const converted of convertRule(rule)) {
+          const keySet =
+            converted.rule.phase === "prefix" ? prefixKeys : globalKeys;
+          if (keySet.has(converted.uniquenessKey)) {
+            throw new DlogError(
+              `Duplicate ${converted.rule.phase} substitution key: ${converted.displayKey}`,
+            );
+          }
+          if (
+            converted.rule.replacement.kind === "callback" &&
+            !pluginNames.has(converted.rule.replacement.plugin)
+          ) {
+            throw new DlogError(
+              `Rule references unknown plugin: ${converted.rule.replacement.plugin}`,
+            );
+          }
+          keySet.add(converted.uniquenessKey);
+          rules.push(converted.rule);
         }
-        if (
-          converted.rule.replacement.kind === "callback" &&
-          !pluginNames.has(converted.rule.replacement.plugin)
-        ) {
-          throw new DlogError(
-            `Rule references unknown plugin: ${converted.rule.replacement.plugin}`,
-          );
-        }
-        keySet.add(converted.uniquenessKey);
-        rules.push(converted.rule);
       }
     }
 
@@ -469,23 +475,37 @@ interface ConvertedRule {
   readonly displayKey: string;
 }
 
-function convertRule(rule: ConfiguredRule): ConvertedRule {
+function convertRule(rule: ConfiguredRule): readonly ConvertedRule[] {
+  if (Array.isArray(rule.match)) {
+    return rule.match.map((match) => convertSingleRule(rule, match));
+  }
+  return [convertSingleRule(rule, rule.match)];
+}
+
+function convertSingleRule(
+  rule: ConfiguredRule,
+  match: string | undefined,
+): ConvertedRule {
   switch (rule.kind) {
     case "prefix": {
+      if (match === undefined)
+        throw new DlogError("A prefix rule requires a literal match");
       const value = rule.replace.endsWith(" ")
         ? rule.replace
         : `${rule.replace} `;
       return {
         rule: {
           phase: "prefix",
-          key: rule.match,
+          key: match,
           replacement: { kind: "static", value },
         },
-        uniquenessKey: `literal:${rule.match}`,
-        displayKey: rule.match,
+        uniquenessKey: `literal:${match}`,
+        displayKey: match,
       };
     }
     case "link": {
+      if (match === undefined)
+        throw new DlogError("A link rule requires a literal match");
       const display = rule.display ?? rule.alias;
       const wrappedPage = /^\[\[(.+)\]\]$/.exec(rule.page);
       const page = wrappedPage?.[1] ?? rule.page;
@@ -496,15 +516,15 @@ function convertRule(rule: ConfiguredRule): ConvertedRule {
       return {
         rule: {
           phase: "global",
-          matcher: { kind: "literal", value: rule.match },
+          matcher: { kind: "literal", value: match },
           replacement: { kind: "static", value },
         },
-        uniquenessKey: `literal:${rule.match}`,
-        displayKey: rule.match,
+        uniquenessKey: `literal:${match}`,
+        displayKey: match,
       };
     }
     case "global": {
-      const matcher = convertMatcher(rule);
+      const matcher = convertMatcher({ ...rule, match });
       return {
         rule: {
           phase: "global",
@@ -521,16 +541,16 @@ function convertRule(rule: ConfiguredRule): ConvertedRule {
         plugin: rule.plugin,
       };
       if (rule.scope === "prefix") {
-        if (rule.match === undefined) {
+        if (match === undefined) {
           throw new DlogError("A prefix callback requires a literal match");
         }
         return {
-          rule: { phase: "prefix", key: rule.match, replacement },
-          uniquenessKey: `literal:${rule.match}`,
-          displayKey: rule.match,
+          rule: { phase: "prefix", key: match, replacement },
+          uniquenessKey: `literal:${match}`,
+          displayKey: match,
         };
       }
-      const matcher = convertMatcher(rule);
+      const matcher = convertMatcher({ ...rule, match });
       return {
         rule: { phase: "global", matcher, replacement },
         uniquenessKey: matcherUniquenessKey(matcher),
@@ -581,7 +601,7 @@ function displayMatcher(matcher: GlobalMatcher): string {
 
 function validateMatcherFields(
   value: {
-    readonly match?: string | undefined;
+    readonly match?: string | readonly string[] | undefined;
     readonly pattern?: string | undefined;
     readonly matcher?: "phone" | undefined;
     readonly flags: string;

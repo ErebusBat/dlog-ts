@@ -44,7 +44,7 @@ const RULE_HELP_BY_KIND: Readonly<Record<RuleKind, RuleHelp>> = {
   prefix: {
     description: "replace a literal match at the start of input",
     details:
-      "Replaces a literal match at the beginning of a string with the given replacement. The match must be followed by whitespace or the end of the input.",
+      "Replaces a literal match at the beginning of a string with the given replacement. The match must be followed by whitespace or the end of the input. Use a match array for multiple inputs sharing one replacement.",
     configuration: `[[rules]]
 kind = "prefix"
 match = "+1"
@@ -82,7 +82,7 @@ plugin = "issues"`,
   link: {
     description: "replace a literal match with an Obsidian link",
     details:
-      "Replaces every literal match with an Obsidian wiki link. Set display (or alias) when the displayed text should differ from the page name.",
+      "Replaces every literal match with an Obsidian wiki link. Set display (or alias) when the displayed text should differ from the page name. Use a match array for multiple inputs sharing the same link.",
     configuration: `[[rules]]
 kind = "link"
 match = "Lucy"
@@ -401,7 +401,9 @@ function ruleInput(rule: ConfiguredRule): string {
   switch (rule.kind) {
     case "prefix":
     case "link":
-      return rule.match;
+      return Array.isArray(rule.match)
+        ? JSON.stringify(rule.match)
+        : rule.match;
     case "global":
     case "callback":
       return configuredMatcher(rule);
@@ -430,7 +432,7 @@ function configuredMatcher(
   rule: Extract<ConfiguredRule, { kind: "global" | "callback" }>,
 ): string {
   if (rule.match !== undefined) {
-    return rule.match;
+    return Array.isArray(rule.match) ? JSON.stringify(rule.match) : rule.match;
   }
   if (rule.matcher === "phone") {
     return "matcher:phone";

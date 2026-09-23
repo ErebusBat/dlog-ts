@@ -302,3 +302,24 @@ json - MyPlugin
     );
   });
 });
+
+test("RULES-09 prints an input list once and counts one configured rule", async () => {
+  const fixture = await rulesFixture();
+  await writeFile(
+    join(fixture.root, "rules", "000-first.toml"),
+    `schema = "dlog-rules/v1"
+[[plugins]]
+name = "MyPlugin"
+protocol = "json"
+command = "echo"
+[[rules]]
+kind = "prefix"
+match = ["M", "MERGE", "MERGED"]
+replace = "🔀"
+`,
+  );
+  expect(await run(fixture, ["print", "--rules", "--color=never"])).toBe(0);
+  expect(fixture.io.output).toContain('│  `["M","MERGE","MERGED"]` => `🔀`');
+  expect(fixture.io.output).toContain("PREFIX rules (1)");
+  expect(fixture.io.output).toContain("TOTAL rules (1)");
+});

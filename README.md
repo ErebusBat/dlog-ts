@@ -161,7 +161,7 @@ The first readable primary configuration is loaded from:
 The primary file owns application settings. It cannot contain processing
 rules.
 
-```toml
+````toml
 schema = "dlog-config/v1"
 
 # First existing directory wins.
@@ -213,7 +213,7 @@ bold = true
 inherit = false
 fg = "bright_cyan"
 underline = true
-```
+````
 
 Available roles are `date`, `heading`, `list_marker`, `timestamp`,
 `entry_separator`, `message`, `strong`, `emphasis`, `wiki_link`, and
@@ -283,9 +283,32 @@ duplicate-checked, resolved, or executed.
 
 Matchers use exactly one of:
 
-- `match = "literal"`;
+- `match = "literal"` or `match = ["literal", "another literal"]`;
 - `pattern = "JavaScript regular expression"` with optional `flags`;
 - `matcher = "phone"` for the bundled North American phone pattern.
+
+Use one rule for inputs that share an output:
+
+```toml
+[[rules]]
+kind = "prefix"
+match = ["M", "MERGE", "MERGED"]
+replace = "🔀"
+
+[[rules]]
+kind = "link"
+match = ["DARTP6", "DARTER"]
+page = "dartp6"
+```
+
+Input lists must be nonempty and contain nonempty strings. They work for all
+literal rule kinds and run sequentially in list order, just like consecutive
+single-input rules. Each input is duplicate-checked in its phase, including
+against other rules. Only combine separated rules when moving their inputs
+together preserves any dependent substitutions. Different link display names
+produce different outputs and should remain separate rules.
+`rules print` counts each configured list as one rule; `--rules` shows the
+complete input list with its shared output.
 
 A callback can set `scope = "prefix"` with a literal `match`; the default scope
 is `global`.

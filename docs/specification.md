@@ -342,6 +342,18 @@ rule files own only includes, plugins, and processing rules.
 
 Reject duplicate prefix keys and duplicate global/wiki-link keys. The current program treats a global string and a global pattern as distinct only when the configuration representation considers those keys distinct; preserve that rule in the chosen portable format.
 
+### Multiple literal inputs
+
+Every rule kind accepts `match` as either a nonempty string or a nonempty
+array of nonempty strings. A list represents consecutive substitutions at that
+rule's position, in array order. Each substitution sees the previous one's
+output; callbacks receive the entry before their individual substitution.
+Duplicate-key validation applies to every input, within and across rules.
+Disabled lists are schema-validated but do not register keys.
+Pattern and named matchers remain scalar and mutually exclusive with `match`.
+Rule inspection counts a list as one configured rule and prints its complete
+JSON input array with the shared replacement or plugin.
+
 ### Callback contract
 
 A dynamic global substitution callback receives:

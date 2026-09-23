@@ -372,3 +372,11 @@ The Ruby behavioral suite used to derive this contract contained 69 examples
 with one known mismatch: an assertion expected a terminal newline after an
 end-of-file log section while the running writer stripped it. DLOG-08 follows
 the running writer and remains normative.
+
+## Grouped literal inputs
+
+| ID       | Setup                                                               | Expected result                                                                                                       |
+| -------- | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| CFG-16   | Prefix, link, global, and callback rules with literal input arrays. | All inputs apply in list order, including cascading replacements; callbacks retain individual substitution semantics. |
+| CFG-17   | Empty array, empty or non-string member, or duplicate input.        | Reject invalid lists at load time; reject duplicate keys within lists and across rules in the same phase.             |
+| RULES-09 | Print a rule with several literal inputs and a shared output.       | Display the full input array once and count one configured rule.                                                      |

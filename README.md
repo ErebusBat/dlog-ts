@@ -29,6 +29,11 @@ dist/<os>-<arch>/dlog-tail -> dlog
 `just compile-all` builds the supported macOS ARM64 and Linux x64 targets.
 Builds never install into `~/bin`.
 
+`just install` compiles and installs into `~/bin`, including subcommand symlinks.
+`just install-binary` installs the existing native build. Installation replaces
+the executable through a temporary file and atomic rename to avoid stale macOS
+code-signing state from overwriting an executable in place.
+
 ## Docker deployment
 
 The production image contains a compiled musl executable on Alpine and runs

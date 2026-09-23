@@ -136,8 +136,17 @@ install: compile install-binary install-links
 [doc('Install compiled binary')]
 [group('Install')]
 install-binary bin=INSTALL_PATH:
-    cp -v {{ OS_COMPILE_PATH }} {{ bin }}
-    @printf "✅ Copied application binary\n"
+    #!/usr/bin/env sh
+    set -eu
+    destination={{ quote(bin) }}
+    mkdir -p "$(dirname "$destination")"
+    temporary=$(mktemp "${destination}.XXXXXX")
+    trap 'rm -f "$temporary"' EXIT
+    trap 'exit 1' HUP INT TERM
+    # A fresh inode avoids stale macOS code-signing state after an overwrite.
+    cp -p {{ quote(OS_COMPILE_PATH) }} "$temporary"
+    mv -f "$temporary" "$destination"
+    printf "✅ Installed application binary\n"
 
 #-----------------------------------------------------------
 ### Links

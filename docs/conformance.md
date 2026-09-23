@@ -17,6 +17,13 @@ A conformance harness needs the ability to:
 
 For deterministic examples below, use local time `2025-07-25 10:30:00`. The default entry formatter is `- *HH:MM* - ` unless another formatter is stated.
 
+## Installation scenarios
+
+Installation case `INSTALL-01`: replacing an existing executable with
+`just install-binary` preserves source bytes and executable permissions but uses
+a fresh inode. Paths containing spaces and quotes work. A missing source leaves
+the installed executable intact and removes the temporary file.
+
 ## Configuration scenarios
 
 These cases verify configuration semantics. The configuration format and how a deployment discovers its configuration are implementation choices.
